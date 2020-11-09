@@ -54,7 +54,11 @@ frappe.ui.form.on('Account', {
 	},
 	account_type: function (frm) {
 		if (frm.doc.is_group == 0) {
-			frm.toggle_display(['tax_rate'], frm.doc.account_type == 'Tax');
+			frm.toggle_display(['tax_rate'], ['Tax', 'Income Account'].includes(frm.doc.account_type));
+			frm.toggle_enable(['tax_rate'], frm.doc.account_type == 'Tax');
+			if (frm.doc.account_type == 'Income Account') {
+				frm.add_fetch('tax_account', 'tax_rate', 'tax_rate');
+			}
 			frm.toggle_display('warehouse', frm.doc.account_type == 'Stock');
 		}
 	},
