@@ -127,6 +127,58 @@ def validate_fiscal_year(from_date, to_date, company):
 		frappe.throw(_('Dates {} and {} are not in the same fiscal year.').format(from_date, to_date))
 
 
+def get_sales_invoice():
+	"""Return Sales Invoices in DATEV form.
+
+	# Hauptbucheinträge (GL Entry) in ERPNext
+
+	Account             Debit       Credit           Voucher No
+	--------            --------    --------         --------------
+	Kunde GmbH          8.92 €                       R-2020-001
+	Erlöse 19% USt                  3.00             R-2020-001
+	Umsatzsteuer 19%                0.57             R-2020-001
+	Erlöse 7% USt                   5.00             R-2020-001
+	Umsatzsteuer 7%                 0.35             R-2020-001
+
+	# Buchungsstapel für DATEV
+
+	Betrag          Konto                Gegenkonto               Belegfeld 1
+	-----------     -------------        ----------------         ------------------
+	3.57            Erlöse 19% USt       Kunde GmbH               R-2020-001
+	5.35            Erlöse 7% USt        Kunde GmbH               R-2020-001
+	"""
+	return frappe.db.sql("""
+		SELECT
+
+			/* either debit or credit amount; always positive */
+			SUM((case gl.debit when 0 then gl.credit else gl.debit end) * (1 + acc.tax_rate / 100)) as 'Umsatz (ohne Soll/Haben-Kz)',
+
+			/* 'H' when credit, 'S' when debit */
+			case gl.debit when 0 then 'H' else 'S' end as 'Soll/Haben-Kennzeichen',
+
+			acc.account_number as 'Konto',
+			gl.against as 'Gegenkonto (ohne BU-Schlüssel)',
+			gl.posting_date as 'Belegdatum',
+			gl.voucher_no as 'Belegfeld 1'
+
+		FROM `tabGL Entry` gl
+
+			LEFT JOIN `tabAccount` acc 
+			ON gl.account = acc.name
+
+		WHERE
+
+			gl.voucher_type = 'Sales Invoice'
+			AND (gl.against_voucher_type IS NULL or gl.against_voucher_type = '')
+			AND acc.account_type = 'Income Account'
+
+		GROUP BY
+
+			gl.voucher_no,
+			gl.account
+		""", as_dict=1)
+
+
 def get_transactions(filters, as_dict=1):
 	"""
 	Get a list of accounting entries.
