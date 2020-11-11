@@ -127,7 +127,7 @@ def validate_fiscal_year(from_date, to_date, company):
 		frappe.throw(_('Dates {} and {} are not in the same fiscal year.').format(from_date, to_date))
 
 
-def get_sales_invoice():
+def get_sales_invoice(filters):
 	"""Return Sales Invoices in DATEV form.
 
 	# Hauptbucheinträge (GL Entry) in ERPNext
@@ -171,12 +171,15 @@ def get_sales_invoice():
 			gl.voucher_type = 'Sales Invoice'
 			AND (gl.against_voucher_type IS NULL or gl.against_voucher_type = '')
 			AND acc.account_type = 'Income Account'
+			AND gl.company = %(company)s 
+			AND DATE(gl.posting_date) >= %(from_date)s
+			AND DATE(gl.posting_date) <= %(to_date)s
 
 		GROUP BY
 
 			gl.voucher_no,
 			gl.account
-		""", as_dict=1)
+		""", filters, as_dict=1)
 
 
 def get_transactions(filters, as_dict=1):
