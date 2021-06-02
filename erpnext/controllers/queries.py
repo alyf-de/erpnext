@@ -2,11 +2,14 @@
 # License: GNU General Public License v3. See license.txt
 
 from __future__ import unicode_literals
+
+import json
+from collections import defaultdict
+
 import frappe
 import erpnext
 from frappe.desk.reportview import get_match_cond, get_filters_cond
-from frappe.utils import nowdate, getdate
-from collections import defaultdict
+from frappe.utils import nowdate
 from erpnext.stock.get_item_details import _get_item_tax_template
 from frappe.utils import unique
 
@@ -215,6 +218,9 @@ def item_query(doctype, txt, searchfield, start, page_len, filters, as_dict=Fals
 	searchfields = searchfields + [field for field in[searchfield or "name", "item_code", "item_group", "item_name"]
 		if not field in searchfields]
 	searchfields = " or ".join([field + " like %(txt)s" for field in searchfields])
+
+	if isinstance(filters, str):
+		filters = json.loads(filters)
 
 	if filters.get('supplier'):
 		item_group_list = frappe.get_all('Supplier Item Group', filters = {'supplier': filters.get('supplier')}, fields = ['item_group'])
