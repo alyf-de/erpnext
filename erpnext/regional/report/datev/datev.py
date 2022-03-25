@@ -243,6 +243,11 @@ def get_payment_entry_params(filters):
 	extra_joins = """
 		LEFT JOIN `tabPayment Entry` pe
 		ON gl.voucher_no = pe.name
+
+		LEFT JOIN `tabParty Account` par
+		ON par.parent = pe.party
+		AND par.parenttype = pe.party_type
+		AND par.company = %(company)s
 	"""
 
 	extra_filters = """
@@ -264,6 +269,11 @@ def get_sales_invoice_params(filters):
 	extra_joins = """
 		LEFT JOIN `tabSales Invoice` si
 		ON gl.voucher_no = si.name
+
+		LEFT JOIN `tabParty Account` par
+		ON par.parent = si.customer
+		AND par.parenttype = 'Customer'
+		AND par.company = %(company)s
 	"""
 
 	extra_filters = """
@@ -285,6 +295,11 @@ def get_purchase_invoice_params(filters):
 	extra_joins = """
 		LEFT JOIN `tabPurchase Invoice` pi
 		ON gl.voucher_no = pi.name
+
+		LEFT JOIN `tabParty Account` par
+		ON par.parent = pi.supplier
+		AND par.parenttype = 'Supplier'
+		AND par.company = %(company)s
 	"""
 
 	extra_filters = """
@@ -303,7 +318,13 @@ def get_generic_params(filters):
 		, '' as 'Beleginfo - Inhalt 6'
 		, '' as 'Fälligkeit'
 	"""
-	extra_joins = ""
+
+	extra_joins = """
+		LEFT JOIN `tabParty Account` par
+		ON par.parent = gl.party
+		AND par.parenttype = gl.party_type
+		AND par.company = %(company)s
+	"""
 
 	if filters.get("exclude_voucher_types"):
 		# exclude voucher types that are queried by a dedicated method
@@ -340,8 +361,8 @@ def run_query(filters, extra_fields, extra_joins, extra_filters, as_dict=1):
 			/* account number or, if empty, party account number */
 			acc.account_number as 'Konto',
 
-			/* against number or, if empty, party against number */
-			%(temporary_against_account_number)s as 'Gegenkonto (ohne BU-Schlüssel)',
+			/* party against number or, if empty, temporary against number */
+			COALESCE(par.debtor_creditor_number, %(temporary_against_account_number)s) as 'Gegenkonto (ohne BU-Schlüssel)',
 
 			'' as 'BU-Schlüssel',
 
@@ -354,8 +375,8 @@ def run_query(filters, extra_fields, extra_joins, extra_filters, as_dict=1):
 			gl.against_voucher as 'Beleginfo - Inhalt 2',
 			gl.party_type as 'Beleginfo - Art 3',
 			gl.party as 'Beleginfo - Inhalt 3',
-			case gl.party_type when 'Customer' then 'Debitorennummer' when 'Supplier' then 'Kreditorennummer' else NULL end as 'Beleginfo - Art 4',
-			par.debtor_creditor_number as 'Beleginfo - Inhalt 4'
+			'' as 'Beleginfo - Art 4',
+			'' as 'Beleginfo - Inhalt 4'
 
 			{extra_fields}
 
@@ -364,11 +385,6 @@ def run_query(filters, extra_fields, extra_joins, extra_filters, as_dict=1):
 			/* Kontonummer */
 			LEFT JOIN `tabAccount` acc
 			ON gl.account = acc.name
-
-			LEFT JOIN `tabParty Account` par
-			ON par.parent = gl.party
-			AND par.parenttype = gl.party_type
-			AND par.company = %(company)s
 
 			{extra_joins}
 

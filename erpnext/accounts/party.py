@@ -313,6 +313,9 @@ def validate_party_accounts(doc):
 		else:
 			companies.append(account.company)
 
+		if not account.account:
+			continue
+
 		party_account_currency = frappe.db.get_value("Account", account.account, "account_currency", cache=True)
 		if frappe.db.get_default("Company"):
 			company_default_currency = frappe.get_cached_value('Company',
