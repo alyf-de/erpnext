@@ -32,7 +32,7 @@ def create_cost_center(**args):
 	if args.cost_center_name:
 		company = args.company or "_Test Company"
 		company_abbr = frappe.db.get_value("Company", company, "abbr")
-		cc_name = args.cost_center_name + " - " + company_abbr
+		cc_name = f"{args.cost_center_name} - {company_abbr}"
 		if not frappe.db.exists("Cost Center", cc_name):
 			cc = frappe.new_doc("Cost Center")
 			cc.company = args.company or "_Test Company"

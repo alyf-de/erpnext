@@ -35,12 +35,12 @@ test_ignore = ["Serial No"]
 
 class TestPurchaseInvoice(unittest.TestCase, StockTestMixin):
 	@classmethod
-	def setUpClass(self):
+	def setUpClass(cls):
 		unlink_payment_on_cancel_of_invoice()
 		frappe.db.set_value("Buying Settings", None, "allow_multiple_items", 1)
 
 	@classmethod
-	def tearDownClass(self):
+	def tearDownClass(cls):
 		unlink_payment_on_cancel_of_invoice(0)
 
 	def test_purchase_invoice_received_qty(self):
@@ -290,17 +290,17 @@ class TestPurchaseInvoice(unittest.TestCase, StockTestMixin):
 
 		self.assertTrue(gl_entries)
 
-		expected_values = dict(
-			(d[0], d)
+		expected_values = {
+			d[0]: d
 			for d in [
 				["Creditors - TCP1", 0, 720],
 				["Stock Received But Not Billed - TCP1", 500.0, 0],
 				["_Test Account Shipping Charges - TCP1", 100.0, 0.0],
 				["_Test Account VAT - TCP1", 120.0, 0],
 			]
-		)
+		}
 
-		for i, gle in enumerate(gl_entries):
+		for gle in gl_entries:
 			self.assertEqual(expected_values[gle.account][0], gle.account)
 			self.assertEqual(expected_values[gle.account][1], gle.debit)
 			self.assertEqual(expected_values[gle.account][2], gle.credit)
@@ -727,7 +727,7 @@ class TestPurchaseInvoice(unittest.TestCase, StockTestMixin):
 			"credit",
 			"credit_in_account_currency",
 		):
-			for i, gle in enumerate(gl_entries):
+			for gle in gl_entries:
 				self.assertEqual(expected_values[gle.account][field], gle[field])
 
 		# Check for valid currency
@@ -774,11 +774,12 @@ class TestPurchaseInvoice(unittest.TestCase, StockTestMixin):
 		self.assertTrue(gl_entries)
 		stock_in_hand_account = get_inventory_account(pi.company, pi.get("items")[0].warehouse)
 
-		expected_gl_entries = dict(
-			(d[0], d) for d in [[pi.credit_to, 0.0, 250.0], [stock_in_hand_account, 250.0, 0.0]]
-		)
+		expected_gl_entries = {
+			d[0]: d
+			for d in [[pi.credit_to, 0.0, 250.0], [stock_in_hand_account, 250.0, 0.0]]
+		}
 
-		for i, gle in enumerate(gl_entries):
+		for gle in gl_entries:
 			self.assertEqual(expected_gl_entries[gle.account][0], gle.account)
 			self.assertEqual(expected_gl_entries[gle.account][1], gle.debit)
 			self.assertEqual(expected_gl_entries[gle.account][2], gle.credit)
@@ -810,16 +811,16 @@ class TestPurchaseInvoice(unittest.TestCase, StockTestMixin):
 		stock_in_hand_account = get_inventory_account(pi.company, pi.get("items")[0].warehouse)
 		self.assertTrue(gl_entries)
 
-		expected_gl_entries = dict(
-			(d[0], d)
+		expected_gl_entries = {
+			d[0]: d
 			for d in [
 				[pi.credit_to, 250.0, 250.0],
 				[stock_in_hand_account, 250.0, 0.0],
 				["Cash - TCP1", 0.0, 250.0],
 			]
-		)
+		}
 
-		for i, gle in enumerate(gl_entries):
+		for gle in gl_entries:
 			self.assertEqual(expected_gl_entries[gle.account][0], gle.account)
 			self.assertEqual(expected_gl_entries[gle.account][1], gle.debit)
 			self.assertEqual(expected_gl_entries[gle.account][2], gle.credit)

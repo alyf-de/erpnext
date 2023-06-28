@@ -50,28 +50,29 @@ class GLEntry(Document):
 			self.validate_currency()
 
 	def on_update(self):
+		if self.flags.from_repost or self.voucher_type == "Period Closing Voucher":
+			return
 		adv_adj = self.flags.adv_adj
-		if not self.flags.from_repost and self.voucher_type != "Period Closing Voucher":
-			self.validate_account_details(adv_adj)
-			self.validate_dimensions_for_pl_and_bs()
-			self.validate_allowed_dimensions()
-			validate_balance_type(self.account, adv_adj)
-			validate_frozen_account(self.account, adv_adj)
+		self.validate_account_details(adv_adj)
+		self.validate_dimensions_for_pl_and_bs()
+		self.validate_allowed_dimensions()
+		validate_balance_type(self.account, adv_adj)
+		validate_frozen_account(self.account, adv_adj)
 
-			if frappe.get_cached_value("Account", self.account, "account_type") not in [
-				"Receivable",
-				"Payable",
-			]:
-				# Update outstanding amt on against voucher
-				if (
-					self.against_voucher_type in ["Journal Entry", "Sales Invoice", "Purchase Invoice", "Fees"]
-					and self.against_voucher
-					and self.flags.update_outstanding == "Yes"
-					and not frappe.flags.is_reverse_depr_entry
-				):
-					update_outstanding_amt(
-						self.account, self.party_type, self.party, self.against_voucher_type, self.against_voucher
-					)
+		if frappe.get_cached_value("Account", self.account, "account_type") not in [
+			"Receivable",
+			"Payable",
+		]:
+			# Update outstanding amt on against voucher
+			if (
+				self.against_voucher_type in ["Journal Entry", "Sales Invoice", "Purchase Invoice", "Fees"]
+				and self.against_voucher
+				and self.flags.update_outstanding == "Yes"
+				and not frappe.flags.is_reverse_depr_entry
+			):
+				update_outstanding_amt(
+					self.account, self.party_type, self.party, self.against_voucher_type, self.against_voucher
+				)
 
 	def check_mandatory(self):
 		mandatory = ["account", "voucher_type", "voucher_no", "company"]
@@ -160,10 +161,10 @@ class GLEntry(Document):
 	def validate_allowed_dimensions(self):
 		dimension_filter_map = get_dimension_filter_map()
 		for key, value in dimension_filter_map.items():
-			dimension = key[0]
 			account = key[1]
 
 			if self.account == account:
+				dimension = key[0]
 				if value["is_mandatory"] and not self.get(dimension):
 					frappe.throw(
 						_("{0} is mandatory for account {1}").format(
@@ -182,16 +183,15 @@ class GLEntry(Document):
 							),
 							InvalidAccountDimensionError,
 						)
-				else:
-					if self.get(dimension) and self.get(dimension) in value["allowed_dimensions"]:
-						frappe.throw(
-							_("Invalid value {0} for {1} against account {2}").format(
-								frappe.bold(self.get(dimension)),
-								frappe.bold(frappe.unscrub(dimension)),
-								frappe.bold(self.account),
-							),
-							InvalidAccountDimensionError,
-						)
+				elif self.get(dimension) and self.get(dimension) in value["allowed_dimensions"]:
+					frappe.throw(
+						_("Invalid value {0} for {1} against account {2}").format(
+							frappe.bold(self.get(dimension)),
+							frappe.bold(frappe.unscrub(dimension)),
+							frappe.bold(self.account),
+						),
+						InvalidAccountDimensionError,
+					)
 
 	def check_pl_account(self):
 		if (
@@ -289,8 +289,9 @@ class GLEntry(Document):
 
 def validate_balance_type(account, adv_adj=False):
 	if not adv_adj and account:
-		balance_must_be = frappe.get_cached_value("Account", account, "balance_must_be")
-		if balance_must_be:
+		if balance_must_be := frappe.get_cached_value(
+			"Account", account, "balance_must_be"
+		):
 			balance = frappe.db.sql(
 				"""select sum(debit) - sum(credit)
 				from `tabGL Entry` where account = %s""",
@@ -441,7 +442,7 @@ def rename_temporarily_named_docs(doctype):
 		set_name_from_naming_options(frappe.get_meta(doctype).autoname, doc)
 		newname = doc.name
 		frappe.db.sql(
-			"UPDATE `tab{}` SET name = %s, to_rename = 0 where name = %s".format(doctype),
+			f"UPDATE `tab{doctype}` SET name = %s, to_rename = 0 where name = %s",
 			(newname, oldname),
 			auto_commit=True,
 		)

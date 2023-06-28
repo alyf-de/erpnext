@@ -30,8 +30,7 @@ def get_voucher_details(bank_guarantee_type: str, reference_name: str):
 
 	if bank_guarantee_type == "Receiving":
 		doctype = "Sales Order"
-		fields_to_fetch.append("customer")
-		fields_to_fetch.append("project")
+		fields_to_fetch.extend(("customer", "project"))
 	else:
 		doctype = "Purchase Order"
 		fields_to_fetch.append("supplier")

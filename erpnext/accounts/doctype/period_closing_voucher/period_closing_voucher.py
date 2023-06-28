@@ -79,8 +79,7 @@ class PeriodClosingVoucher(AccountsController):
 			)
 
 	def make_gl_entries(self):
-		gl_entries = self.get_gl_entries()
-		if gl_entries:
+		if gl_entries := self.get_gl_entries():
 			if len(gl_entries) > 5000:
 				frappe.enqueue(process_gl_entries, gl_entries=gl_entries, queue="long")
 				frappe.msgprint(
@@ -91,13 +90,11 @@ class PeriodClosingVoucher(AccountsController):
 				process_gl_entries(gl_entries)
 
 	def get_gl_entries(self):
-		gl_entries = []
-
-		# pl account
-		for acc in self.get_pl_balances_based_on_dimensions(group_by_account=True):
-			if flt(acc.bal_in_company_currency):
-				gl_entries.append(self.get_gle_for_pl_account(acc))
-
+		gl_entries = [
+			self.get_gle_for_pl_account(acc)
+			for acc in self.get_pl_balances_based_on_dimensions(group_by_account=True)
+			if flt(acc.bal_in_company_currency)
+		]
 		# closing liability account
 		for acc in self.get_pl_balances_based_on_dimensions(group_by_account=False):
 			if flt(acc.bal_in_company_currency):
@@ -160,9 +157,9 @@ class PeriodClosingVoucher(AccountsController):
 		dimension_fields = ["t1.cost_center", "t1.finance_book"]
 
 		self.accounting_dimensions = get_accounting_dimensions()
-		for dimension in self.accounting_dimensions:
-			dimension_fields.append("t1.{0}".format(dimension))
-
+		dimension_fields.extend(
+			"t1.{0}".format(dimension) for dimension in self.accounting_dimensions
+		)
 		if group_by_account:
 			dimension_fields.append("t1.account")
 

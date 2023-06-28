@@ -41,12 +41,9 @@ def create_bank_entries(columns, data, bank_account):
 	success = 0
 	errors = 0
 	for d in json.loads(data):
-		if all(item is None for item in d) is True:
+		if all(item is None for item in d):
 			continue
-		fields = {}
-		for key, value in header_map.items():
-			fields.update({key: d[int(value) - 1]})
-
+		fields = {key: d[int(value) - 1] for key, value in header_map.items()}
 		try:
 			bank_transaction = frappe.get_doc({"doctype": "Bank Transaction"})
 			bank_transaction.update(fields)
@@ -65,18 +62,18 @@ def create_bank_entries(columns, data, bank_account):
 def get_header_mapping(columns, bank_account):
 	mapping = get_bank_mapping(bank_account)
 
-	header_map = {}
-	for column in json.loads(columns):
-		if column["content"] in mapping:
-			header_map.update({mapping[column["content"]]: column["colIndex"]})
-
-	return header_map
+	return {
+		mapping[column["content"]]: column["colIndex"]
+		for column in json.loads(columns)
+		if column["content"] in mapping
+	}
 
 
 def get_bank_mapping(bank_account):
 	bank_name = frappe.get_cached_value("Bank Account", bank_account, "bank")
 	bank = frappe.get_doc("Bank", bank_name)
 
-	mapping = {row.file_field: row.bank_transaction_field for row in bank.bank_transaction_mapping}
-
-	return mapping
+	return {
+		row.file_field: row.bank_transaction_field
+		for row in bank.bank_transaction_mapping
+	}

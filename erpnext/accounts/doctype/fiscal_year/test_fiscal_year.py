@@ -40,16 +40,15 @@ def test_record_generator():
 
 	start = 2012
 	end = now_datetime().year + 5
-	for year in range(start, end):
-		test_records.append(
-			{
-				"doctype": "Fiscal Year",
-				"year": f"_Test Fiscal Year {year}",
-				"year_start_date": f"{year}-01-01",
-				"year_end_date": f"{year}-12-31",
-			}
-		)
-
+	test_records.extend(
+		{
+			"doctype": "Fiscal Year",
+			"year": f"_Test Fiscal Year {year}",
+			"year_start_date": f"{year}-01-01",
+			"year_end_date": f"{year}-12-31",
+		}
+		for year in range(start, end)
+	)
 	return test_records
 
 

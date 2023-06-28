@@ -24,31 +24,31 @@ def start_payment_ledger_repost(docname=None):
 	"""
 	Repost Payment Ledger Entries for Vouchers through Background Job
 	"""
-	if docname:
-		repost_doc = frappe.get_doc("Repost Payment Ledger", docname)
-		if repost_doc.docstatus.is_submitted() and repost_doc.repost_status in ["Queued", "Failed"]:
-			try:
-				for entry in repost_doc.repost_vouchers:
-					doc = frappe.get_doc(entry.voucher_type, entry.voucher_no)
+	if not docname:
+		return
+	repost_doc = frappe.get_doc("Repost Payment Ledger", docname)
+	if repost_doc.docstatus.is_submitted() and repost_doc.repost_status in ["Queued", "Failed"]:
+		try:
+			for entry in repost_doc.repost_vouchers:
+				doc = frappe.get_doc(entry.voucher_type, entry.voucher_no)
 
-					if doc.doctype in ["Payment Entry", "Journal Entry"]:
-						gle_map = doc.build_gl_map()
-					else:
-						gle_map = doc.get_gl_entries()
+				if doc.doctype in ["Payment Entry", "Journal Entry"]:
+					gle_map = doc.build_gl_map()
+				else:
+					gle_map = doc.get_gl_entries()
 
-					repost_ple_for_voucher(entry.voucher_type, entry.voucher_no, gle_map)
+				repost_ple_for_voucher(entry.voucher_type, entry.voucher_no, gle_map)
 
-				frappe.db.set_value(repost_doc.doctype, repost_doc.name, "repost_error_log", "")
-				frappe.db.set_value(repost_doc.doctype, repost_doc.name, "repost_status", "Completed")
-			except Exception as e:
-				frappe.db.rollback()
+			frappe.db.set_value(repost_doc.doctype, repost_doc.name, "repost_error_log", "")
+			frappe.db.set_value(repost_doc.doctype, repost_doc.name, "repost_status", "Completed")
+		except Exception as e:
+			frappe.db.rollback()
 
-				traceback = frappe.get_traceback()
-				if traceback:
-					message = "Traceback: <br>" + traceback
-					frappe.db.set_value(repost_doc.doctype, repost_doc.name, "repost_error_log", message)
+			if traceback := frappe.get_traceback():
+				message = f"Traceback: <br>{traceback}"
+				frappe.db.set_value(repost_doc.doctype, repost_doc.name, "repost_error_log", message)
 
-				frappe.db.set_value(repost_doc.doctype, repost_doc.name, "repost_status", "Failed")
+			frappe.db.set_value(repost_doc.doctype, repost_doc.name, "repost_status", "Failed")
 
 
 class RepostPaymentLedger(Document):
@@ -99,7 +99,7 @@ class RepostPaymentLedger(Document):
 def execute_repost_payment_ledger(docname):
 	"""Repost Payment Ledger Entries by background job."""
 
-	job_name = "payment_ledger_repost_" + docname
+	job_name = f"payment_ledger_repost_{docname}"
 
 	frappe.enqueue(
 		method="erpnext.accounts.doctype.repost_payment_ledger.repost_payment_ledger.start_payment_ledger_repost",

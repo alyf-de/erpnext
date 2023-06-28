@@ -317,7 +317,7 @@ def _make_test_records(verbose=None):
 				{
 					"doctype": "Account",
 					"account_name": account_name,
-					"parent_account": parent_account + " - " + abbr,
+					"parent_account": f"{parent_account} - {abbr}",
 					"company": company,
 					"is_group": is_group,
 					"account_type": account_type,
@@ -332,31 +332,32 @@ def _make_test_records(verbose=None):
 
 def get_inventory_account(company, warehouse=None):
 	account = None
-	if warehouse:
-		account = get_warehouse_account(frappe.get_doc("Warehouse", warehouse))
-	else:
-		account = get_company_default_inventory_account(company)
-
-	return account
+	return (
+		get_warehouse_account(frappe.get_doc("Warehouse", warehouse))
+		if warehouse
+		else get_company_default_inventory_account(company)
+	)
 
 
 def create_account(**kwargs):
-	account = frappe.db.get_value(
-		"Account", filters={"account_name": kwargs.get("account_name"), "company": kwargs.get("company")}
-	)
-	if account:
+	if account := frappe.db.get_value(
+		"Account",
+		filters={
+			"account_name": kwargs.get("account_name"),
+			"company": kwargs.get("company"),
+		},
+	):
 		return account
-	else:
-		account = frappe.get_doc(
-			dict(
-				doctype="Account",
-				account_name=kwargs.get("account_name"),
-				account_type=kwargs.get("account_type"),
-				parent_account=kwargs.get("parent_account"),
-				company=kwargs.get("company"),
-				account_currency=kwargs.get("account_currency"),
-			)
+	account = frappe.get_doc(
+		dict(
+			doctype="Account",
+			account_name=kwargs.get("account_name"),
+			account_type=kwargs.get("account_type"),
+			parent_account=kwargs.get("parent_account"),
+			company=kwargs.get("company"),
+			account_currency=kwargs.get("account_currency"),
 		)
+	)
 
-		account.save()
-		return account.name
+	account.save()
+	return account.name

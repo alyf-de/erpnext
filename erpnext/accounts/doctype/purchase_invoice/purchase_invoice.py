@@ -172,8 +172,8 @@ class PurchaseInvoice(BuyingController):
 	def validate_credit_to_acc(self):
 		if not self.credit_to:
 			self.credit_to = get_party_account("Supplier", self.supplier, self.company)
-			if not self.credit_to:
-				self.raise_missing_debit_credit_account_error("Supplier", self.supplier)
+		if not self.credit_to:
+			self.raise_missing_debit_credit_account_error("Supplier", self.supplier)
 
 		account = frappe.get_cached_value(
 			"Account", self.credit_to, ["account_type", "report_type", "account_currency"], as_dict=True
@@ -201,7 +201,11 @@ class PurchaseInvoice(BuyingController):
 		check_list = []
 
 		for d in self.get("items"):
-			if d.purchase_order and not d.purchase_order in check_list and not d.purchase_receipt:
+			if (
+				d.purchase_order
+				and d.purchase_order not in check_list
+				and not d.purchase_receipt
+			):
 				check_list.append(d.purchase_order)
 				check_on_hold_or_closed_status("Purchase Order", d.purchase_order)
 
@@ -269,7 +273,7 @@ class PurchaseInvoice(BuyingController):
 			stock_items = self.get_stock_items()
 
 		asset_items = [d.is_fixed_asset for d in self.items if d.is_fixed_asset]
-		if len(asset_items) > 0:
+		if asset_items:
 			asset_received_but_not_billed = self.get_company_default("asset_received_but_not_billed")
 
 		if self.update_stock:
@@ -312,45 +316,41 @@ class PurchaseInvoice(BuyingController):
 						)
 						frappe.msgprint(msg, title=_("Expense Head Changed"))
 					item.expense_account = warehouse_account[item.warehouse]["account"]
-				else:
-					# check if 'Stock Received But Not Billed' account is credited in Purchase receipt or not
-					if item.purchase_receipt:
-						negative_expense_booked_in_pr = frappe.db.sql(
-							"""select name from `tabGL Entry`
+				elif item.purchase_receipt:
+					if negative_expense_booked_in_pr := frappe.db.sql(
+						"""select name from `tabGL Entry`
 							where voucher_type='Purchase Receipt' and voucher_no=%s and account = %s""",
-							(item.purchase_receipt, stock_not_billed_account),
-						)
-
-						if negative_expense_booked_in_pr:
-							if (
-								for_validate and item.expense_account and item.expense_account != stock_not_billed_account
-							):
-								msg = _(
-									"Row {0}: Expense Head changed to {1} because expense is booked against this account in Purchase Receipt {2}"
-								).format(
-									item.idx, frappe.bold(stock_not_billed_account), frappe.bold(item.purchase_receipt)
-								)
-								frappe.msgprint(msg, title=_("Expense Head Changed"))
-
-							item.expense_account = stock_not_billed_account
-					else:
-						# If no purchase receipt present then book expense in 'Stock Received But Not Billed'
-						# This is done in cases when Purchase Invoice is created before Purchase Receipt
+						(item.purchase_receipt, stock_not_billed_account),
+					):
 						if (
 							for_validate and item.expense_account and item.expense_account != stock_not_billed_account
 						):
 							msg = _(
-								"Row {0}: Expense Head changed to {1} as no Purchase Receipt is created against Item {2}."
+								"Row {0}: Expense Head changed to {1} because expense is booked against this account in Purchase Receipt {2}"
 							).format(
-								item.idx, frappe.bold(stock_not_billed_account), frappe.bold(item.item_code)
-							)
-							msg += "<br>"
-							msg += _(
-								"This is done to handle accounting for cases when Purchase Receipt is created after Purchase Invoice"
+								item.idx, frappe.bold(stock_not_billed_account), frappe.bold(item.purchase_receipt)
 							)
 							frappe.msgprint(msg, title=_("Expense Head Changed"))
 
 						item.expense_account = stock_not_billed_account
+				else:
+					# If no purchase receipt present then book expense in 'Stock Received But Not Billed'
+					# This is done in cases when Purchase Invoice is created before Purchase Receipt
+					if (
+						for_validate and item.expense_account and item.expense_account != stock_not_billed_account
+					):
+						msg = _(
+							"Row {0}: Expense Head changed to {1} as no Purchase Receipt is created against Item {2}."
+						).format(
+							item.idx, frappe.bold(stock_not_billed_account), frappe.bold(item.item_code)
+						)
+						msg += "<br>"
+						msg += _(
+							"This is done to handle accounting for cases when Purchase Receipt is created after Purchase Invoice"
+						)
+						frappe.msgprint(msg, title=_("Expense Head Changed"))
+
+					item.expense_account = stock_not_billed_account
 
 			elif item.is_fixed_asset and not is_cwip_accounting_enabled(asset_category):
 				asset_category_account = get_asset_category_account(
@@ -747,22 +747,21 @@ class PurchaseInvoice(BuyingController):
 								)
 							)
 
-					else:
-						if not self.is_internal_transfer():
-							gl_entries.append(
-								self.get_gl_dict(
-									{
-										"account": item.expense_account,
-										"against": self.supplier,
-										"debit": warehouse_debit_amount,
-										"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
-										"cost_center": item.cost_center,
-										"project": item.project or self.project,
-									},
-									account_currency,
-									item=item,
-								)
+					elif not self.is_internal_transfer():
+						gl_entries.append(
+							self.get_gl_dict(
+								{
+									"account": item.expense_account,
+									"against": self.supplier,
+									"debit": warehouse_debit_amount,
+									"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
+									"cost_center": item.cost_center,
+									"project": item.project or self.project,
+								},
+								account_currency,
+								item=item,
 							)
+						)
 
 					# Amount added through landed-cost-voucher
 					if landed_cost_entries:
@@ -824,8 +823,7 @@ class PurchaseInvoice(BuyingController):
 								purchase_receipt_doc = frappe.get_doc("Purchase Receipt", item.purchase_receipt)
 								purchase_receipt_doc_map[item.purchase_receipt] = purchase_receipt_doc
 
-							# Post reverse entry for Stock-Received-But-Not-Billed if it is booked in Purchase Receipt
-							expense_booked_in_pr = frappe.db.get_value(
+							if expense_booked_in_pr := frappe.db.get_value(
 								"GL Entry",
 								{
 									"is_cancelled": 0,
@@ -835,9 +833,7 @@ class PurchaseInvoice(BuyingController):
 									"account": provisional_account,
 								},
 								["name"],
-							)
-
-							if expense_booked_in_pr:
+							):
 								# Intentionally passing purchase invoice item to handle partial billing
 								purchase_receipt_doc.add_provisional_gl_entry(
 									item, gl_entries, self.posting_date, provisional_account, reverse=1
@@ -1176,7 +1172,7 @@ class PurchaseInvoice(BuyingController):
 							"account": tax.account_head,
 							"against": self.supplier,
 							dr_or_cr: base_amount,
-							dr_or_cr + "_in_account_currency": base_amount
+							f"{dr_or_cr}_in_account_currency": base_amount
 							if account_currency == self.company_currency
 							else amount,
 							"cost_center": tax.cost_center,
@@ -1439,7 +1435,7 @@ class PurchaseInvoice(BuyingController):
 			if cint(frappe.db.get_single_value("Accounts Settings", "check_supplier_invoice_uniqueness")):
 				fiscal_year = get_fiscal_year(self.posting_date, company=self.company, as_dict=True)
 
-				pi = frappe.db.sql(
+				if pi := frappe.db.sql(
 					"""select name from `tabPurchase Invoice`
 					where
 						bill_no = %(bill_no)s
@@ -1454,9 +1450,7 @@ class PurchaseInvoice(BuyingController):
 						"year_start_date": fiscal_year.year_start_date,
 						"year_end_date": fiscal_year.year_end_date,
 					},
-				)
-
-				if pi:
+				):
 					pi = pi[0][0]
 					frappe.throw(_("Supplier Invoice No exists in Purchase Invoice {0}").format(pi))
 
@@ -1711,20 +1705,24 @@ def make_debit_note(source_name, target_doc=None):
 
 @frappe.whitelist()
 def make_stock_entry(source_name, target_doc=None):
-	doc = get_mapped_doc(
+	return get_mapped_doc(
 		"Purchase Invoice",
 		source_name,
 		{
-			"Purchase Invoice": {"doctype": "Stock Entry", "validation": {"docstatus": ["=", 1]}},
+			"Purchase Invoice": {
+				"doctype": "Stock Entry",
+				"validation": {"docstatus": ["=", 1]},
+			},
 			"Purchase Invoice Item": {
 				"doctype": "Stock Entry Detail",
-				"field_map": {"stock_qty": "transfer_qty", "batch_no": "batch_no"},
+				"field_map": {
+					"stock_qty": "transfer_qty",
+					"batch_no": "batch_no",
+				},
 			},
 		},
 		target_doc,
 	)
-
-	return doc
 
 
 @frappe.whitelist()

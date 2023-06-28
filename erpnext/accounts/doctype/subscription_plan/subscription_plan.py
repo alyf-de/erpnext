@@ -41,11 +41,7 @@ def get_plan_rate(
 			company=None,
 			qty=quantity,
 		)
-		if not price:
-			return 0
-		else:
-			return price.price_list_rate * prorate_factor
-
+		return 0 if not price else price.price_list_rate * prorate_factor
 	elif plan.price_determination == "Monthly Rate":
 		start_date = getdate(start_date)
 		end_date = getdate(end_date)
@@ -53,10 +49,7 @@ def get_plan_rate(
 		no_of_months = relativedelta.relativedelta(end_date, start_date).months + 1
 		cost = plan.cost * no_of_months
 
-		# Adjust cost if start or end date is not month start or end
-		prorate = frappe.db.get_single_value("Subscription Settings", "prorate")
-
-		if prorate:
+		if prorate := frappe.db.get_single_value("Subscription Settings", "prorate"):
 			prorate_factor = flt(
 				date_diff(start_date, get_first_day(start_date))
 				/ date_diff(get_last_day(start_date), get_first_day(start_date)),

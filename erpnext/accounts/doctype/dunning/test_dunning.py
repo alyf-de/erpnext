@@ -18,13 +18,13 @@ from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import (
 
 class TestDunning(unittest.TestCase):
 	@classmethod
-	def setUpClass(self):
+	def setUpClass(cls):
 		create_dunning_type()
 		create_dunning_type_with_zero_interest_rate()
 		unlink_payment_on_cancel_of_invoice()
 
 	@classmethod
-	def tearDownClass(self):
+	def tearDownClass(cls):
 		unlink_payment_on_cancel_of_invoice(0)
 
 	def test_dunning(self):
@@ -56,9 +56,10 @@ class TestDunning(unittest.TestCase):
 			as_dict=1,
 		)
 		self.assertTrue(gl_entries)
-		expected_values = dict(
-			(d[0], d) for d in [["Debtors - _TC", 20.44, 0.0], ["Sales - _TC", 0.0, 20.44]]
-		)
+		expected_values = {
+			d[0]: d
+			for d in [["Debtors - _TC", 20.44, 0.0], ["Sales - _TC", 0.0, 20.44]]
+		}
 		for gle in gl_entries:
 			self.assertEqual(expected_values[gle.account][0], gle.account)
 			self.assertEqual(expected_values[gle.account][1], gle.debit)

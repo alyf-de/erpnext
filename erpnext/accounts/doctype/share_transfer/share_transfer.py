@@ -204,11 +204,12 @@ class ShareTransfer(Document):
 					self.from_folio_no if (shareholder_field == "from_shareholder") else self.to_folio_no
 				)
 				doc.save()
-			else:
-				if doc.folio_no and doc.folio_no != (
-					self.from_folio_no if (shareholder_field == "from_shareholder") else self.to_folio_no
-				):
-					frappe.throw(_("The folio numbers are not matching"))
+			elif doc.folio_no != (
+				self.from_folio_no
+				if (shareholder_field == "from_shareholder")
+				else self.to_folio_no
+			):
+				frappe.throw(_("The folio numbers are not matching"))
 
 	def autoname_folio(self, shareholder, is_company=False):
 		if is_company:
@@ -237,20 +238,23 @@ class ShareTransfer(Document):
 			elif entry.from_no <= self.from_no and entry.to_no >= self.to_no:
 				# split
 				if entry.from_no == self.from_no:
-					if entry.to_no == self.to_no:
-						pass  # nothing to append
-					else:
+					if entry.to_no != self.to_no:
 						new_entries.append(self.return_share_balance_entry(self.to_no + 1, entry.to_no, entry.rate))
+				elif entry.to_no == self.to_no:
+					new_entries.append(
+						self.return_share_balance_entry(entry.from_no, self.from_no - 1, entry.rate)
+					)
 				else:
-					if entry.to_no == self.to_no:
-						new_entries.append(
-							self.return_share_balance_entry(entry.from_no, self.from_no - 1, entry.rate)
+					new_entries.extend(
+						(
+							self.return_share_balance_entry(
+								entry.from_no, self.from_no - 1, entry.rate
+							),
+							self.return_share_balance_entry(
+								self.to_no + 1, entry.to_no, entry.rate
+							),
 						)
-					else:
-						new_entries.append(
-							self.return_share_balance_entry(entry.from_no, self.from_no - 1, entry.rate)
-						)
-						new_entries.append(self.return_share_balance_entry(self.to_no + 1, entry.to_no, entry.rate))
+					)
 			elif entry.from_no >= self.from_no and entry.to_no <= self.to_no:
 				# split and check
 				pass  # nothing to append
@@ -289,20 +293,16 @@ class ShareTransfer(Document):
 		return frappe.get_doc("Shareholder", name)
 
 	def get_company_shareholder(self):
-		# Get company doc or create one if not present
-		company_shareholder = frappe.db.get_value(
+		if company_shareholder := frappe.db.get_value(
 			"Shareholder", {"company": self.company, "is_company": 1}, "name"
-		)
-
-		if company_shareholder:
+		):
 			return frappe.get_doc("Shareholder", company_shareholder)
-		else:
-			shareholder = frappe.get_doc(
-				{"doctype": "Shareholder", "title": self.company, "company": self.company, "is_company": 1}
-			)
-			shareholder.insert()
+		shareholder = frappe.get_doc(
+			{"doctype": "Shareholder", "title": self.company, "company": self.company, "is_company": 1}
+		)
+		shareholder.insert()
 
-			return shareholder
+		return shareholder
 
 
 @frappe.whitelist()
@@ -320,23 +320,20 @@ def make_jv_entry(
 	journal_entry.voucher_type = "Journal Entry"
 	journal_entry.company = company
 	journal_entry.posting_date = nowdate()
-	account_amt_list = []
-
-	account_amt_list.append(
+	account_amt_list = [
 		{
 			"account": account,
 			"debit_in_account_currency": amount,
 			"party_type": debit_applicant_type,
 			"party": debit_applicant,
-		}
-	)
-	account_amt_list.append(
+		},
 		{
 			"account": payment_account,
 			"credit_in_account_currency": amount,
 			"party_type": credit_applicant_type,
 			"party": credit_applicant,
-		}
-	)
+		},
+	]
+
 	journal_entry.set("accounts", account_amt_list)
 	return journal_entry.as_dict()

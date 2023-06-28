@@ -35,8 +35,7 @@ class ItemTaxTemplate(Document):
 							"Item Tax Row {0} must have account of type Tax or Income or Expense or Chargeable"
 						).format(d.idx)
 					)
+				elif d.tax_type in check_list:
+					frappe.throw(_("{0} entered twice in Item Tax").format(d.tax_type))
 				else:
-					if d.tax_type in check_list:
-						frappe.throw(_("{0} entered twice in Item Tax").format(d.tax_type))
-					else:
-						check_list.append(d.tax_type)
+					check_list.append(d.tax_type)

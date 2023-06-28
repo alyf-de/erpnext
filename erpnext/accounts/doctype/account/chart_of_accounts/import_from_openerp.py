@@ -59,10 +59,11 @@ def go():
 
 
 def get_default_account_types():
-	default_types_root = []
-	default_types_root.append(
-		ET.parse(os.path.join(path, "account", "data", "data_account_type.xml")).getroot()
-	)
+	default_types_root = [
+		ET.parse(
+			os.path.join(path, "account", "data", "data_account_type.xml")
+		).getroot()
+	]
 	return get_account_types(default_types_root, None, prefix="account")
 
 
@@ -124,16 +125,16 @@ def get_account_types(root_list, csv_content, prefix=None):
 	for root in root_list:
 		for node in root[0].findall("record"):
 			if node.get("model") == "account.account.type":
-				data = {}
-				for field in node.findall("field"):
+				data = {
+					"account_type": account_type_map[field.text]
+					for field in node.findall("field")
 					if (
 						field.get("name") == "code"
 						and field.text.lower() != "none"
 						and account_type_map.get(field.text)
-					):
-						data["account_type"] = account_type_map[field.text]
-
-				node_id = prefix + "." + node.get("id") if prefix else node.get("id")
+					)
+				}
+				node_id = f"{prefix}." + node.get("id") if prefix else node.get("id")
 				types[node_id] = data
 
 	if csv_content and csv_content[0][0] == "id":
@@ -143,7 +144,7 @@ def get_account_types(root_list, csv_content, prefix=None):
 			if row_dict.get("code") and account_type_map.get(row_dict["code"]):
 				data["account_type"] = account_type_map[row_dict["code"]]
 			if data and data.get("id"):
-				node_id = prefix + "." + data.get("id") if prefix else data.get("id")
+				node_id = f"{prefix}." + data.get("id") if prefix else data.get("id")
 				types[node_id] = data
 	return types
 
@@ -241,17 +242,17 @@ def make_charts():
 		if not src.get("name") or not src.get("account_root_id"):
 			continue
 
-		if not src["account_root_id"] in accounts:
+		if src["account_root_id"] not in accounts:
 			continue
 
 		filename = src["id"][5:] + "_" + chart_id
 
-		print("building " + filename)
-		chart = {}
-		chart["name"] = src["name"]
-		chart["country_code"] = src["id"][5:]
-		chart["tree"] = accounts[src["account_root_id"]]
-
+		print(f"building {filename}")
+		chart = {
+			"name": src["name"],
+			"country_code": src["id"][5:],
+			"tree": accounts[src["account_root_id"]],
+		}
 		for key, val in chart["tree"].items():
 			if key in ["name", "parent_id"]:
 				chart["tree"].pop(key)
@@ -259,7 +260,13 @@ def make_charts():
 				val["root_type"] = ""
 		if chart:
 			fpath = os.path.join(
-				"erpnext", "erpnext", "accounts", "doctype", "account", "chart_of_accounts", filename + ".json"
+				"erpnext",
+				"erpnext",
+				"accounts",
+				"doctype",
+				"account",
+				"chart_of_accounts",
+				f"{filename}.json",
 			)
 
 			with open(fpath, "r") as chartfile:

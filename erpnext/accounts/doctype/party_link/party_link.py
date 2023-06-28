@@ -16,32 +16,36 @@ class PartyLink(Document):
 				title=_("Invalid Primary Role"),
 			)
 
-		existing_party_link = frappe.get_all(
+		if existing_party_link := frappe.get_all(
 			"Party Link",
-			{"primary_party": self.primary_party, "secondary_party": self.secondary_party},
+			{
+				"primary_party": self.primary_party,
+				"secondary_party": self.secondary_party,
+			},
 			pluck="primary_role",
-		)
-		if existing_party_link:
+		):
 			frappe.throw(
 				_("{} {} is already linked with {} {}").format(
 					self.primary_role, bold(self.primary_party), self.secondary_role, bold(self.secondary_party)
 				)
 			)
 
-		existing_party_link = frappe.get_all(
-			"Party Link", {"primary_party": self.secondary_party}, pluck="primary_role"
-		)
-		if existing_party_link:
+		if existing_party_link := frappe.get_all(
+			"Party Link",
+			{"primary_party": self.secondary_party},
+			pluck="primary_role",
+		):
 			frappe.throw(
 				_("{} {} is already linked with another {}").format(
 					self.secondary_role, self.secondary_party, existing_party_link[0]
 				)
 			)
 
-		existing_party_link = frappe.get_all(
-			"Party Link", {"secondary_party": self.primary_party}, pluck="primary_role"
-		)
-		if existing_party_link:
+		if existing_party_link := frappe.get_all(
+			"Party Link",
+			{"secondary_party": self.primary_party},
+			pluck="primary_role",
+		):
 			frappe.throw(
 				_("{} {} is already linked with another {}").format(
 					self.primary_role, self.primary_party, existing_party_link[0]

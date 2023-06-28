@@ -18,13 +18,11 @@ def get_loyalty_details(
 	if not expiry_date:
 		expiry_date = today()
 
-	condition = ""
-	if company:
-		condition = " and company=%s " % frappe.db.escape(company)
+	condition = f" and company={frappe.db.escape(company)} " if company else ""
 	if not include_expired_entry:
-		condition += " and expiry_date>='%s' " % expiry_date
+		condition += f" and expiry_date>='{expiry_date}' "
 
-	loyalty_point_details = frappe.db.sql(
+	if loyalty_point_details := frappe.db.sql(
 		"""select sum(loyalty_points) as loyalty_points,
 		sum(purchase_amount) as total_spent from `tabLoyalty Point Entry`
 		where customer=%s and loyalty_program=%s and posting_date <= %s
@@ -34,9 +32,7 @@ def get_loyalty_details(
 		),
 		(customer, loyalty_program, expiry_date),
 		as_dict=1,
-	)
-
-	if loyalty_point_details:
+	):
 		return loyalty_point_details[0]
 	else:
 		return {"loyalty_points": 0, "total_spent": 0}
@@ -66,12 +62,14 @@ def get_loyalty_program_details_with_points(
 		reverse=True,
 	)
 	for i, d in enumerate(tier_spent_level):
-		if i == 0 or (lp_details.total_spent + current_transaction_amount) <= d.min_spent:
-			lp_details.tier_name = d.tier_name
-			lp_details.collection_factor = d.collection_factor
-		else:
+		if (
+			i != 0
+			and lp_details.total_spent + current_transaction_amount > d.min_spent
+		):
 			break
 
+		lp_details.tier_name = d.tier_name
+		lp_details.collection_factor = d.collection_factor
 	return lp_details
 
 

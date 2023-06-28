@@ -58,7 +58,7 @@ class AccountsReceivableSummary(ReceivablePayableReport):
 			row.party = party
 			if self.party_naming_by == "Naming Series":
 				row.party_name = frappe.get_cached_value(
-					self.party_type, party, scrub(self.party_type) + "_name"
+					self.party_type, party, f"{scrub(self.party_type)}_name"
 				)
 
 			row.update(party_dict)
@@ -195,7 +195,7 @@ class AccountsReceivableSummary(ReceivablePayableReport):
 				"{range4}-{above}".format(range4=cint(self.filters["range4"]) + 1, above=_("Above")),
 			]
 		):
-			self.add_column(label=label, fieldname="range" + str(i + 1))
+			self.add_column(label=label, fieldname=f"range{str(i + 1)}")
 
 		# Add column for total due amount
 		self.add_column(label="Total Amount Due", fieldname="total_due")

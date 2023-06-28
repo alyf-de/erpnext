@@ -189,9 +189,7 @@ def get_account_type_based_gl_data(company, filters=None):
 			frappe.db.escape(company_fb),
 		)
 	else:
-		cond = " AND (finance_book in (%s, '') OR finance_book IS NULL)" % (
-			frappe.db.escape(cstr(filters.finance_book))
-		)
+		cond = f" AND (finance_book in ({frappe.db.escape(cstr(filters.finance_book))}, '') OR finance_book IS NULL)"
 
 	if filters.get("cost_center"):
 		filters.cost_center = get_cost_centers_with_children(filters.cost_center)
@@ -217,11 +215,11 @@ def get_start_date(period, accumulated_values, company):
 	if not accumulated_values and period.get("from_date"):
 		return period["from_date"]
 
-	start_date = period["year_start_date"]
-	if accumulated_values:
-		start_date = get_fiscal_year(period.to_date, company=company)[1]
-
-	return start_date
+	return (
+		get_fiscal_year(period.to_date, company=company)[1]
+		if accumulated_values
+		else period["year_start_date"]
+	)
 
 
 def add_total_row_account(
@@ -255,14 +253,15 @@ def add_total_row_account(
 
 
 def get_report_summary(summary_data, currency):
-	report_summary = []
-
-	for label, value in summary_data.items():
-		report_summary.append(
-			{"value": value, "label": label, "datatype": "Currency", "currency": currency}
-		)
-
-	return report_summary
+	return [
+		{
+			"value": value,
+			"label": label,
+			"datatype": "Currency",
+			"currency": currency,
+		}
+		for label, value in summary_data.items()
+	]
 
 
 def get_chart_data(columns, data):
@@ -273,12 +272,12 @@ def get_chart_data(columns, data):
 			"values": [account.get(d.get("fieldname")) for d in columns[2:]],
 		}
 		for account in data
-		if account.get("parent_account") == None and account.get("currency")
+		if account.get("parent_account") is None and account.get("currency")
 	]
 	datasets = datasets[:-1]
 
-	chart = {"data": {"labels": labels, "datasets": datasets}, "type": "bar"}
-
-	chart["fieldtype"] = "Currency"
-
-	return chart
+	return {
+		"data": {"labels": labels, "datasets": datasets},
+		"type": "bar",
+		"fieldtype": "Currency",
+	}

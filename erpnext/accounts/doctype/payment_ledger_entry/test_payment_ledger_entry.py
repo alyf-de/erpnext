@@ -89,7 +89,7 @@ class TestPaymentLedgerEntry(FrappeTestCase):
 		"""
 		Helper function to populate default values in sales invoice
 		"""
-		sinv = create_sales_invoice(
+		return create_sales_invoice(
 			qty=qty,
 			rate=rate,
 			company=self.company,
@@ -110,7 +110,6 @@ class TestPaymentLedgerEntry(FrappeTestCase):
 			do_not_save=do_not_save,
 			do_not_submit=do_not_submit,
 		)
-		return sinv
 
 	def create_payment_entry(self, amount=100, posting_date=nowdate()):
 		"""
@@ -131,7 +130,7 @@ class TestPaymentLedgerEntry(FrappeTestCase):
 	def create_sales_order(
 		self, qty=1, rate=100, posting_date=nowdate(), do_not_save=False, do_not_submit=False
 	):
-		so = make_sales_order(
+		return make_sales_order(
 			company=self.company,
 			transaction_date=posting_date,
 			customer=self.customer,
@@ -145,7 +144,6 @@ class TestPaymentLedgerEntry(FrappeTestCase):
 			do_not_save=do_not_save,
 			do_not_submit=do_not_submit,
 		)
-		return so
 
 	def clear_old_entries(self):
 		doctype_list = [
@@ -174,13 +172,13 @@ class TestPaymentLedgerEntry(FrappeTestCase):
 				{
 					"account": acc1,
 					"cost_center": cost_center,
-					"debit_in_account_currency": amount if amount > 0 else 0,
+					"debit_in_account_currency": max(amount, 0),
 					"credit_in_account_currency": abs(amount) if amount < 0 else 0,
 				},
 				{
 					"account": acc2,
 					"cost_center": cost_center,
-					"credit_in_account_currency": amount if amount > 0 else 0,
+					"credit_in_account_currency": max(amount, 0),
 					"debit_in_account_currency": abs(amount) if amount < 0 else 0,
 				},
 			],

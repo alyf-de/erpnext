@@ -286,7 +286,7 @@ def get_all_unconsolidated_invoices():
 		"status": ["not in", ["Consolidated"]],
 		"docstatus": 1,
 	}
-	pos_invoices = frappe.db.get_all(
+	return frappe.db.get_all(
 		"POS Invoice",
 		filters=filters,
 		fields=[
@@ -298,8 +298,6 @@ def get_all_unconsolidated_invoices():
 			"return_against",
 		],
 	)
-
-	return pos_invoices
 
 
 def get_invoice_customer_map(pos_invoices):

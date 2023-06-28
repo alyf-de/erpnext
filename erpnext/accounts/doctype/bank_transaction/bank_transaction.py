@@ -94,13 +94,11 @@ def get_doctypes_for_bank_reconciliation():
 
 
 def get_reconciled_bank_transactions(payment_entry):
-	reconciled_bank_transactions = frappe.get_all(
+	return frappe.get_all(
 		"Bank Transaction Payments",
 		filters={"payment_entry": payment_entry.payment_entry},
 		fields=["parent"],
 	)
-
-	return reconciled_bank_transactions
 
 
 def get_total_allocated_amount(payment_entry):

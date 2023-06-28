@@ -119,46 +119,44 @@ class InvoiceDiscounting(AccountsController):
 					"Account", self.accounts_receivable_credit, "currency"
 				)
 
-				gl_entries.append(
-					self.get_gl_dict(
-						{
-							"account": inv.debit_to,
-							"party_type": "Customer",
-							"party": d.customer,
-							"against": self.accounts_receivable_credit,
-							"credit": outstanding_in_company_currency,
-							"credit_in_account_currency": outstanding_in_company_currency
-							if inv.party_account_currency == company_currency
-							else d.outstanding_amount,
-							"cost_center": inv.cost_center,
-							"against_voucher": d.sales_invoice,
-							"against_voucher_type": "Sales Invoice",
-						},
-						inv.party_account_currency,
-						item=inv,
+				gl_entries.extend(
+					(
+						self.get_gl_dict(
+							{
+								"account": inv.debit_to,
+								"party_type": "Customer",
+								"party": d.customer,
+								"against": self.accounts_receivable_credit,
+								"credit": outstanding_in_company_currency,
+								"credit_in_account_currency": outstanding_in_company_currency
+								if inv.party_account_currency == company_currency
+								else d.outstanding_amount,
+								"cost_center": inv.cost_center,
+								"against_voucher": d.sales_invoice,
+								"against_voucher_type": "Sales Invoice",
+							},
+							inv.party_account_currency,
+							item=inv,
+						),
+						self.get_gl_dict(
+							{
+								"account": self.accounts_receivable_credit,
+								"party_type": "Customer",
+								"party": d.customer,
+								"against": inv.debit_to,
+								"debit": outstanding_in_company_currency,
+								"debit_in_account_currency": outstanding_in_company_currency
+								if ar_credit_account_currency == company_currency
+								else d.outstanding_amount,
+								"cost_center": inv.cost_center,
+								"against_voucher": d.sales_invoice,
+								"against_voucher_type": "Sales Invoice",
+							},
+							ar_credit_account_currency,
+							item=inv,
+						),
 					)
 				)
-
-				gl_entries.append(
-					self.get_gl_dict(
-						{
-							"account": self.accounts_receivable_credit,
-							"party_type": "Customer",
-							"party": d.customer,
-							"against": inv.debit_to,
-							"debit": outstanding_in_company_currency,
-							"debit_in_account_currency": outstanding_in_company_currency
-							if ar_credit_account_currency == company_currency
-							else d.outstanding_amount,
-							"cost_center": inv.cost_center,
-							"against_voucher": d.sales_invoice,
-							"against_voucher_type": "Sales Invoice",
-						},
-						ar_credit_account_currency,
-						item=inv,
-					)
-				)
-
 		make_gl_entries(gl_entries, cancel=(self.docstatus == 2), update_outstanding="No")
 
 	@frappe.whitelist()
@@ -166,7 +164,7 @@ class InvoiceDiscounting(AccountsController):
 		je = frappe.new_doc("Journal Entry")
 		je.voucher_type = "Journal Entry"
 		je.company = self.company
-		je.remark = "Loan Disbursement entry against Invoice Discounting: " + self.name
+		je.remark = f"Loan Disbursement entry against Invoice Discounting: {self.name}"
 
 		je.append(
 			"accounts",
@@ -231,7 +229,7 @@ class InvoiceDiscounting(AccountsController):
 		je = frappe.new_doc("Journal Entry")
 		je.voucher_type = "Journal Entry"
 		je.company = self.company
-		je.remark = "Loan Settlement entry against Invoice Discounting: " + self.name
+		je.remark = f"Loan Settlement entry against Invoice Discounting: {self.name}"
 
 		je.append(
 			"accounts",
@@ -331,7 +329,7 @@ def get_invoices(filters):
 
 def get_party_account_based_on_invoice_discounting(sales_invoice):
 	party_account = None
-	invoice_discounting = frappe.db.sql(
+	if invoice_discounting := frappe.db.sql(
 		"""
 		select par.accounts_receivable_discounted, par.accounts_receivable_unpaid, par.status
 		from `tabInvoice Discounting` par, `tabDiscounted Invoice` ch
@@ -341,8 +339,7 @@ def get_party_account_based_on_invoice_discounting(sales_invoice):
 	""",
 		(sales_invoice),
 		as_dict=1,
-	)
-	if invoice_discounting:
+	):
 		if invoice_discounting[0].status == "Disbursed":
 			party_account = invoice_discounting[0].accounts_receivable_discounted
 		elif invoice_discounting[0].status == "Settled":

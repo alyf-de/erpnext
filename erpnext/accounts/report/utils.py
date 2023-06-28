@@ -34,14 +34,12 @@ def get_currency(filters):
 		fiscal_year_to_date = get_from_and_to_date(filters.get("to_fiscal_year"))["to_date"]
 		report_date = formatdate(get_datetime_str(fiscal_year_to_date), "dd-MM-yyyy")
 
-	currency_map = dict(
+	return dict(
 		company=company,
 		company_currency=company_currency,
 		presentation_currency=presentation_currency,
 		report_date=report_date,
 	)
-
-	return currency_map
 
 
 def convert(value, from_, to, date):
@@ -54,8 +52,7 @@ def convert(value, from_, to, date):
 	:return: Result of converting `value`
 	"""
 	rate = get_rate_as_at(date, from_, to)
-	converted_value = flt(value) / (rate or 1)
-	return converted_value
+	return flt(value) / (rate or 1)
 
 
 def get_rate_as_at(date, from_currency, to_currency):
@@ -90,7 +87,7 @@ def convert_to_presentation_currency(gl_entries, currency_info, company):
 	presentation_currency = currency_info["presentation_currency"]
 	company_currency = currency_info["company_currency"]
 
-	account_currencies = list(set(entry["account_currency"] for entry in gl_entries))
+	account_currencies = list({entry["account_currency"] for entry in gl_entries})
 
 	for entry in gl_entries:
 		account = entry["account"]
@@ -120,12 +117,7 @@ def convert_to_presentation_currency(gl_entries, currency_info, company):
 
 
 def get_appropriate_company(filters):
-	if filters.get("company"):
-		company = filters["company"]
-	else:
-		company = get_default_company()
-
-	return company
+	return filters["company"] if filters.get("company") else get_default_company()
 
 
 @frappe.whitelist()

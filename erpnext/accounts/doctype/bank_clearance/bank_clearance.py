@@ -190,7 +190,7 @@ class BankClearance(Document):
 				d.account_currency = default_currency
 
 			formatted_amount = fmt_money(abs(amount), 2, d.account_currency)
-			d.amount = formatted_amount + " " + (_("Dr") if amount > 0 else _("Cr"))
+			d.amount = f"{formatted_amount} " + (_("Dr") if amount > 0 else _("Cr"))
 			d.posting_date = getdate(d.posting_date)
 
 			d.pop("credit")

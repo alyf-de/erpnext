@@ -59,15 +59,14 @@ def validate_disabled_accounts(gl_map):
 
 	Account = frappe.qb.DocType("Account")
 
-	disabled_accounts = (
+	if disabled_accounts := (
 		frappe.qb.from_(Account)
 		.where(Account.name.isin(accounts) & Account.disabled == 1)
 		.select(Account.name, Account.disabled)
-	).run(as_dict=True)
-
-	if disabled_accounts:
-		account_list = "<br>"
-		account_list += ", ".join([frappe.bold(d.name) for d in disabled_accounts])
+	).run(as_dict=True):
+		account_list = "<br>" + ", ".join(
+			[frappe.bold(d.name) for d in disabled_accounts]
+		)
 		frappe.throw(
 			_("Cannot create accounting entries against disabled accounts: {0}").format(account_list),
 			title=_("Disabled Account Selected"),
@@ -75,7 +74,7 @@ def validate_disabled_accounts(gl_map):
 
 
 def validate_accounting_period(gl_map):
-	accounting_periods = frappe.db.sql(
+	if accounting_periods := frappe.db.sql(
 		""" SELECT
 			ap.name as name
 		FROM
@@ -93,9 +92,7 @@ def validate_accounting_period(gl_map):
 			"voucher_type": gl_map[0].voucher_type,
 		},
 		as_dict=1,
-	)
-
-	if accounting_periods:
+	):
 		frappe.throw(
 			_(
 				"You cannot create or cancel any accounting entries with in the closed Accounting Period {0}"
@@ -176,10 +173,9 @@ def merge_similar_entries(gl_map, precision=None):
 	accounting_dimensions = get_accounting_dimensions()
 
 	for entry in gl_map:
-		# if there is already an entry in this account then just add it
-		# to that entry
-		same_head = check_if_in_list(entry, merged_gl_map, accounting_dimensions)
-		if same_head:
+		if same_head := check_if_in_list(
+			entry, merged_gl_map, accounting_dimensions
+		):
 			same_head.debit = flt(same_head.debit) + flt(entry.debit)
 			same_head.debit_in_account_currency = flt(same_head.debit_in_account_currency) + flt(
 				entry.debit_in_account_currency
@@ -226,7 +222,7 @@ def check_if_in_list(gle, gl_map, dimensions=None):
 	]
 
 	if dimensions:
-		account_head_fieldnames = account_head_fieldnames + dimensions
+		account_head_fieldnames += dimensions
 
 	for e in gl_map:
 		same_head = True
@@ -352,17 +348,17 @@ def process_debit_credit_difference(gl_map):
 		currency=frappe.get_cached_value("Company", gl_map[0].company, "default_currency"),
 	)
 
-	voucher_type = gl_map[0].voucher_type
 	voucher_no = gl_map[0].voucher_no
+	voucher_type = gl_map[0].voucher_type
 	allowance = get_debit_credit_allowance(voucher_type, precision)
 
 	debit_credit_diff = get_debit_credit_difference(gl_map, precision)
 
 	if abs(debit_credit_diff) > allowance:
-		if not (
-			voucher_type == "Journal Entry"
-			and frappe.get_cached_value("Journal Entry", voucher_no, "voucher_type")
-			== "Exchange Gain Or Loss"
+		if (
+			voucher_type != "Journal Entry"
+			or frappe.get_cached_value("Journal Entry", voucher_no, "voucher_type")
+			!= "Exchange Gain Or Loss"
 		):
 			raise_debit_credit_not_equal_error(debit_credit_diff, voucher_type, voucher_no)
 
@@ -371,10 +367,10 @@ def process_debit_credit_difference(gl_map):
 
 	debit_credit_diff = get_debit_credit_difference(gl_map, precision)
 	if abs(debit_credit_diff) > allowance:
-		if not (
-			voucher_type == "Journal Entry"
-			and frappe.get_cached_value("Journal Entry", voucher_no, "voucher_type")
-			== "Exchange Gain Or Loss"
+		if (
+			voucher_type != "Journal Entry"
+			or frappe.get_cached_value("Journal Entry", voucher_no, "voucher_type")
+			!= "Exchange Gain Or Loss"
 		):
 			raise_debit_credit_not_equal_error(debit_credit_diff, voucher_type, voucher_no)
 
@@ -392,12 +388,11 @@ def get_debit_credit_difference(gl_map, precision):
 
 
 def get_debit_credit_allowance(voucher_type, precision):
-	if voucher_type in ("Journal Entry", "Payment Entry"):
-		allowance = 5.0 / (10**precision)
-	else:
-		allowance = 0.5
-
-	return allowance
+	return (
+		5.0 / (10**precision)
+		if voucher_type in ("Journal Entry", "Payment Entry")
+		else 0.5
+	)
 
 
 def raise_debit_credit_not_equal_error(debit_credit_diff, voucher_type, voucher_no):
@@ -436,10 +431,12 @@ def make_round_off_gle(gl_map, debit_credit_diff, precision):
 	round_off_gle.update(
 		{
 			"account": round_off_account,
-			"debit_in_account_currency": abs(debit_credit_diff) if debit_credit_diff < 0 else 0,
-			"credit_in_account_currency": debit_credit_diff if debit_credit_diff > 0 else 0,
+			"debit_in_account_currency": abs(debit_credit_diff)
+			if debit_credit_diff < 0
+			else 0,
+			"credit_in_account_currency": max(debit_credit_diff, 0),
 			"debit": abs(debit_credit_diff) if debit_credit_diff < 0 else 0,
-			"credit": debit_credit_diff if debit_credit_diff > 0 else 0,
+			"credit": max(debit_credit_diff, 0),
 			"cost_center": round_off_cost_center,
 			"party_type": None,
 			"party": None,
@@ -481,8 +478,9 @@ def get_round_off_account_and_cost_center(company, voucher_type, voucher_no):
 
 	# Give first preference to parent cost center for round off GLE
 	if meta.has_field("cost_center"):
-		parent_cost_center = frappe.db.get_value(voucher_type, voucher_no, "cost_center")
-		if parent_cost_center:
+		if parent_cost_center := frappe.db.get_value(
+			voucher_type, voucher_no, "cost_center"
+		):
 			round_off_cost_center = parent_cost_center
 
 	if not round_off_account:
@@ -551,8 +549,9 @@ def check_freezing_date(posting_date, adv_adj=False):
 	Hence stop admin to bypass if accounts are freezed
 	"""
 	if not adv_adj:
-		acc_frozen_upto = frappe.db.get_value("Accounts Settings", None, "acc_frozen_upto")
-		if acc_frozen_upto:
+		if acc_frozen_upto := frappe.db.get_value(
+			"Accounts Settings", None, "acc_frozen_upto"
+		):
 			frozen_accounts_modifier = frappe.db.get_value(
 				"Accounts Settings", None, "frozen_accounts_modifier"
 			)

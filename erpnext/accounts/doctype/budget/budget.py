@@ -145,13 +145,15 @@ def validate_expense_against_budget(args, expense_amount=0):
 				)  # nosec
 				args.is_tree = True
 			else:
-				condition = "and b.%s=%s" % (budget_against, frappe.db.escape(args.get(budget_against)))
+				condition = (
+					f"and b.{budget_against}={frappe.db.escape(args.get(budget_against))}"
+				)
 				args.is_tree = False
 
 			args.budget_against_field = budget_against
 			args.budget_against_doctype = doctype
 
-			budget_records = frappe.db.sql(
+			if budget_records := frappe.db.sql(
 				"""
 				select
 					b.{budget_against_field} as budget_against, ba.budget_amount, b.monthly_distribution,
@@ -172,9 +174,7 @@ def validate_expense_against_budget(args, expense_amount=0):
 				),
 				(args.fiscal_year, args.account),
 				as_dict=True,
-			)  # nosec
-
-			if budget_records:
+			):
 				validate_budget_records(args, budget_records, expense_amount)
 
 
@@ -298,11 +298,13 @@ def get_ordered_amount(args, budget):
 
 
 def get_other_condition(args, budget, for_doc):
-	condition = "expense_account = '%s'" % (args.expense_account)
+	condition = f"expense_account = '{args.expense_account}'"
 	budget_against_field = args.get("budget_against_field")
 
 	if budget_against_field and args.get(budget_against_field):
-		condition += " and child.%s = '%s'" % (budget_against_field, args.get(budget_against_field))
+		condition += (
+			f" and child.{budget_against_field} = '{args.get(budget_against_field)}'"
+		)
 
 	if args.get("fiscal_year"):
 		date_field = "schedule_date" if for_doc == "Material Request" else "transaction_date"
@@ -346,7 +348,7 @@ def get_actual_expense(args):
 			doctype=args.budget_against_doctype, budget_against=budget_against_field
 		)
 
-	amount = flt(
+	return flt(
 		frappe.db.sql(
 			"""
 		select sum(gle.debit) - sum(gle.credit)
@@ -362,9 +364,7 @@ def get_actual_expense(args):
 			),
 			(args),
 		)[0][0]
-	)  # nosec
-
-	return amount
+	)
 
 
 def get_accumulated_monthly_budget(monthly_distribution, posting_date, fiscal_year, annual_budget):
@@ -400,12 +400,11 @@ def get_item_details(args):
 		return cost_center, expense_account
 
 	if args.item_code:
-		item_defaults = frappe.db.get_value(
+		if item_defaults := frappe.db.get_value(
 			"Item Default",
 			{"parent": args.item_code, "company": args.get("company")},
 			["buying_cost_center", "expense_account"],
-		)
-		if item_defaults:
+		):
 			cost_center, expense_account = item_defaults
 
 	if not (cost_center and expense_account):

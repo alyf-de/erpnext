@@ -92,8 +92,7 @@ class Account(NestedSet):
 				self.root_type = par.root_type
 
 		if self.is_group:
-			db_value = self.get_doc_before_save()
-			if db_value:
+			if db_value := self.get_doc_before_save():
 				if self.report_type != db_value.report_type:
 					frappe.db.sql(
 						"update `tabAccount` set report_type=%s where lft > %s and rgt < %s",
@@ -125,8 +124,7 @@ class Account(NestedSet):
 			frappe.local.flags.ignore_root_company_validation or self.flags.ignore_root_company_validation
 		):
 			return
-		ancestors = get_root_company(self.company)
-		if ancestors:
+		if ancestors := get_root_company(self.company):
 			if frappe.get_cached_value(
 				"Company", self.company, "allow_account_creation_against_child_company"
 			):
@@ -139,7 +137,6 @@ class Account(NestedSet):
 			descendants = get_descendants_of("Company", self.company)
 			if not descendants:
 				return
-			parent_acc_name_map = {}
 			parent_acc_name, parent_acc_number = frappe.get_cached_value(
 				"Account", self.parent_account, ["account_name", "account_number"]
 			)
@@ -150,15 +147,18 @@ class Account(NestedSet):
 			if parent_acc_number:
 				filters["account_number"] = parent_acc_number
 
-			for d in frappe.db.get_values(
-				"Account", filters=filters, fieldname=["company", "name"], as_dict=True
-			):
-				parent_acc_name_map[d["company"]] = d["name"]
-
-			if not parent_acc_name_map:
+			if parent_acc_name_map := {
+				d["company"]: d["name"]
+				for d in frappe.db.get_values(
+					"Account",
+					filters=filters,
+					fieldname=["company", "name"],
+					as_dict=True,
+				)
+			}:
+				self.create_account_for_child_company(parent_acc_name_map, descendants, parent_acc_name)
+			else:
 				return
-
-			self.create_account_for_child_company(parent_acc_name_map, descendants, parent_acc_name)
 
 	def validate_group_or_ledger(self):
 		doc_before_save = self.get_doc_before_save()
@@ -259,7 +259,7 @@ class Account(NestedSet):
 
 				doc.save()
 				frappe.msgprint(_("Account {0} is added in the child company {1}").format(doc.name, company))
-			elif child_account:
+			else:
 				# update the parent company's value in child companies
 				doc = frappe.get_doc("Account", child_account)
 				parent_value_changed = False
@@ -367,10 +367,14 @@ def get_account_autoname(account_number, account_name, company):
 
 def validate_account_number(name, account_number, company):
 	if account_number:
-		account_with_same_number = frappe.db.get_value(
-			"Account", {"account_number": account_number, "company": company, "name": ["!=", name]}
-		)
-		if account_with_same_number:
+		if account_with_same_number := frappe.db.get_value(
+			"Account",
+			{
+				"account_number": account_number,
+				"company": company,
+				"name": ["!=", name],
+			},
+		):
 			frappe.throw(
 				_("Account Number {0} already used in account {1}").format(
 					account_number, account_with_same_number
@@ -420,9 +424,7 @@ def update_account_number(name, account_name, account_number=None, from_descenda
 	frappe.db.set_value("Account", name, "account_name", account_name.strip())
 
 	if not from_descendant:
-		# Update and rename in child company accounts as well
-		descendants = get_descendants_of("Company", account.company)
-		if descendants:
+		if descendants := get_descendants_of("Company", account.company):
 			sync_update_account_number_in_child(
 				descendants, old_acc_name, account_name, account_number, old_acc_number
 			)

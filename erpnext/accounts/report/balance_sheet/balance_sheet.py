@@ -139,14 +139,12 @@ def get_provisional_profit_loss(
 			total_row["total"] = total_row_total
 
 		if has_value:
-			provisional_profit_loss.update(
-				{
-					"account_name": "'" + _("Provisional Profit / Loss (Credit)") + "'",
-					"account": "'" + _("Provisional Profit / Loss (Credit)") + "'",
-					"warn_if_negative": True,
-					"currency": currency,
-				}
-			)
+			provisional_profit_loss |= {
+				"account_name": "'" + _("Provisional Profit / Loss (Credit)") + "'",
+				"account": "'" + _("Provisional Profit / Loss (Credit)") + "'",
+				"warn_if_negative": True,
+				"currency": currency,
+			}
 
 	return provisional_profit_loss, total_row
 
@@ -162,8 +160,7 @@ def check_opening_balance(asset, liability, equity):
 	if equity:
 		opening_balance -= flt(equity[-1].get("opening_balance", 0), float_precision)
 
-	opening_balance = flt(opening_balance, float_precision)
-	if opening_balance:
+	if opening_balance := flt(opening_balance, float_precision):
 		return _("Previous Financial Year is not closed"), opening_balance
 	return None, None
 
@@ -240,11 +237,7 @@ def get_chart_data(filters, columns, asset, liability, equity):
 	if equity_data:
 		datasets.append({"name": _("Equity"), "values": equity_data})
 
-	chart = {"data": {"labels": labels, "datasets": datasets}}
-
-	if not filters.accumulated_values:
-		chart["type"] = "bar"
-	else:
-		chart["type"] = "line"
-
-	return chart
+	return {
+		"data": {"labels": labels, "datasets": datasets},
+		"type": "bar" if not filters.accumulated_values else "line",
+	}

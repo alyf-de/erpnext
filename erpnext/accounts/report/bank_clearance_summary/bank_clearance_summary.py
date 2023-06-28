@@ -18,7 +18,7 @@ def execute(filters=None):
 
 
 def get_columns():
-	columns = [
+	return [
 		{
 			"label": _("Payment Document Type"),
 			"fieldname": "payment_document_type",
@@ -32,9 +32,23 @@ def get_columns():
 			"options": "payment_document_type",
 			"width": 140,
 		},
-		{"label": _("Posting Date"), "fieldname": "posting_date", "fieldtype": "Date", "width": 120},
-		{"label": _("Cheque/Reference No"), "fieldname": "cheque_no", "width": 120},
-		{"label": _("Clearance Date"), "fieldname": "clearance_date", "fieldtype": "Date", "width": 120},
+		{
+			"label": _("Posting Date"),
+			"fieldname": "posting_date",
+			"fieldtype": "Date",
+			"width": 120,
+		},
+		{
+			"label": _("Cheque/Reference No"),
+			"fieldname": "cheque_no",
+			"width": 120,
+		},
+		{
+			"label": _("Clearance Date"),
+			"fieldname": "clearance_date",
+			"fieldtype": "Date",
+			"width": 120,
+		},
 		{
 			"label": _("Against Account"),
 			"fieldname": "against",
@@ -42,10 +56,13 @@ def get_columns():
 			"options": "Account",
 			"width": 200,
 		},
-		{"label": _("Amount"), "fieldname": "amount", "fieldtype": "Currency", "width": 120},
+		{
+			"label": _("Amount"),
+			"fieldname": "amount",
+			"fieldtype": "Currency",
+			"width": 120,
+		},
 	]
-
-	return columns
 
 
 def get_conditions(filters):

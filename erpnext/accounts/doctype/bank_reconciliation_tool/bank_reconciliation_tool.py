@@ -25,15 +25,16 @@ class BankReconciliationTool(Document):
 @frappe.whitelist()
 def get_bank_transactions(bank_account, from_date=None, to_date=None):
 	# returns bank transactions for a bank account
-	filters = []
-	filters.append(["bank_account", "=", bank_account])
-	filters.append(["docstatus", "=", 1])
-	filters.append(["unallocated_amount", ">", 0])
+	filters = [
+		["bank_account", "=", bank_account],
+		["docstatus", "=", 1],
+		["unallocated_amount", ">", 0],
+	]
 	if to_date:
 		filters.append(["date", "<=", to_date])
 	if from_date:
 		filters.append(["date", ">=", from_date])
-	transactions = frappe.get_all(
+	return frappe.get_all(
 		"Bank Transaction",
 		fields=[
 			"date",
@@ -52,7 +53,6 @@ def get_bank_transactions(bank_account, from_date=None, to_date=None):
 		filters=filters,
 		order_by="date",
 	)
-	return transactions
 
 
 @frappe.whitelist()
@@ -73,14 +73,12 @@ def get_account_balance(bank_account, till_date):
 
 	amounts_not_reflected_in_system = get_amounts_not_reflected_in_system(filters)
 
-	bank_bal = (
+	return (
 		flt(balance_as_per_system)
 		- flt(total_debit)
 		+ flt(total_credit)
 		+ amounts_not_reflected_in_system
 	)
-
-	return bank_bal
 
 
 @frappe.whitelist()
@@ -142,31 +140,21 @@ def create_journal_entry_bts(
 					second_account
 				)
 			)
-	accounts = []
-	# Multi Currency?
-	accounts.append(
+	accounts = [
 		{
 			"account": second_account,
-			"credit_in_account_currency": bank_transaction.deposit if bank_transaction.deposit > 0 else 0,
-			"debit_in_account_currency": bank_transaction.withdrawal
-			if bank_transaction.withdrawal > 0
-			else 0,
+			"credit_in_account_currency": max(bank_transaction.deposit, 0),
+			"debit_in_account_currency": max(bank_transaction.withdrawal, 0),
 			"party_type": party_type,
 			"party": party,
-		}
-	)
-
-	accounts.append(
+		},
 		{
 			"account": company_account,
 			"bank_account": bank_transaction.bank_account,
-			"credit_in_account_currency": bank_transaction.withdrawal
-			if bank_transaction.withdrawal > 0
-			else 0,
-			"debit_in_account_currency": bank_transaction.deposit if bank_transaction.deposit > 0 else 0,
-		}
-	)
-
+			"credit_in_account_currency": max(bank_transaction.withdrawal, 0),
+			"debit_in_account_currency": max(bank_transaction.deposit, 0),
+		},
+	]
 	company = frappe.get_cached_value("Account", company_account, "company")
 
 	journal_entry_dict = {
@@ -279,6 +267,7 @@ def auto_reconcile_vouchers(
 	document_types = ["payment_entry", "journal_entry"]
 	bank_transactions = get_bank_transactions(bank_account)
 	matched_transaction = []
+	matched_trans = 0
 	for transaction in bank_transactions:
 		linked_payments = get_linked_payments(
 			transaction.name,
@@ -289,18 +278,16 @@ def auto_reconcile_vouchers(
 			from_reference_date,
 			to_reference_date,
 		)
-		vouchers = []
-		for r in linked_payments:
-			vouchers.append(
-				{
-					"payment_doctype": r[1],
-					"payment_name": r[2],
-					"amount": r[4],
-				}
-			)
+		vouchers = [
+			{
+				"payment_doctype": r[1],
+				"payment_name": r[2],
+				"amount": r[4],
+			}
+			for r in linked_payments
+		]
 		transaction = frappe.get_doc("Bank Transaction", transaction.name)
 		account = frappe.db.get_value("Bank Account", transaction.bank_account, "account")
-		matched_trans = 0
 		for voucher in vouchers:
 			gl_entry = frappe.db.get_value(
 				"GL Entry",
@@ -417,7 +404,7 @@ def get_linked_payments(
 		"Bank Account", transaction.bank_account, ["account", "company"], as_dict=True
 	)[0]
 	(account, company) = (bank_account.account, bank_account.company)
-	matching = check_matching(
+	return check_matching(
 		account,
 		company,
 		transaction,
@@ -428,7 +415,6 @@ def get_linked_payments(
 		from_reference_date,
 		to_reference_date,
 	)
-	return matching
 
 
 def check_matching(
@@ -568,7 +554,7 @@ def get_matching_queries(
 
 def get_loan_vouchers(bank_account, transaction, document_types, filters):
 	vouchers = []
-	amount_condition = True if "exact_match" in document_types else False
+	amount_condition = "exact_match" in document_types
 
 	if transaction.withdrawal > 0 and "loan_disbursement" in document_types:
 		vouchers.extend(get_ld_matching_query(bank_account, amount_condition, filters))
@@ -612,9 +598,7 @@ def get_ld_matching_query(bank_account, amount_condition, filters):
 	else:
 		query.where(loan_disbursement.disbursed_amount <= filters.get("amount"))
 
-	vouchers = query.run(as_list=True)
-
-	return vouchers
+	return query.run(as_list=True)
 
 
 def get_lr_matching_query(bank_account, amount_condition, filters):
@@ -653,9 +637,7 @@ def get_lr_matching_query(bank_account, amount_condition, filters):
 	else:
 		query.where(loan_repayment.amount_paid <= filters.get("amount"))
 
-	vouchers = query.run()
-
-	return vouchers
+	return query.run()
 
 
 def get_pe_matching_query(

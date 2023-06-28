@@ -123,7 +123,11 @@ def get_report_pdf(doc, consolidated=True):
 
 		html = frappe.render_template(
 			base_template_path,
-			{"body": html, "css": get_print_style(), "title": "Statement For " + entry.customer},
+			{
+				"body": html,
+				"css": get_print_style(),
+				"title": f"Statement For {entry.customer}",
+			},
 		)
 		statement_dict[entry.customer] = html
 
@@ -224,17 +228,16 @@ def fetch_customers(customer_collection, collection_name, primary_mandatory):
 		customers = get_customers_based_on_sales_person(collection_name)
 		if not bool(customers):
 			frappe.throw(_("No Customers found with selected options."))
+	elif customer_collection == "Sales Partner":
+		customers = frappe.get_list(
+			"Customer",
+			fields=["name", "email_id"],
+			filters=[["default_sales_partner", "=", collection_name]],
+		)
 	else:
-		if customer_collection == "Sales Partner":
-			customers = frappe.get_list(
-				"Customer",
-				fields=["name", "email_id"],
-				filters=[["default_sales_partner", "=", collection_name]],
-			)
-		else:
-			customers = get_customers_based_on_territory_or_customer_group(
-				customer_collection, collection_name
-			)
+		customers = get_customers_based_on_territory_or_customer_group(
+			customer_collection, collection_name
+		)
 
 	for customer in customers:
 		primary_email = customer.get("email_id") or ""
@@ -301,9 +304,8 @@ def get_customer_emails(customer_name, primary_mandatory, billing_and_primary=Tr
 @frappe.whitelist()
 def download_statements(document_name):
 	doc = frappe.get_doc("Process Statement Of Accounts", document_name)
-	report = get_report_pdf(doc)
-	if report:
-		frappe.local.response.filename = doc.name + ".pdf"
+	if report := get_report_pdf(doc):
+		frappe.local.response.filename = f"{doc.name}.pdf"
 		frappe.local.response.filecontent = report
 		frappe.local.response.type = "download"
 
@@ -311,48 +313,47 @@ def download_statements(document_name):
 @frappe.whitelist()
 def send_emails(document_name, from_scheduler=False):
 	doc = frappe.get_doc("Process Statement Of Accounts", document_name)
-	report = get_report_pdf(doc, consolidated=False)
-
-	if report:
-		for customer, report_pdf in report.items():
-			attachments = [{"fname": customer + ".pdf", "fcontent": report_pdf}]
-
-			recipients, cc = get_recipients_and_cc(customer, doc)
-			if not recipients:
-				continue
-			context = get_context(customer, doc)
-			subject = frappe.render_template(doc.subject, context)
-			message = frappe.render_template(doc.body, context)
-
-			frappe.enqueue(
-				queue="short",
-				method=frappe.sendmail,
-				recipients=recipients,
-				sender=frappe.session.user,
-				cc=cc,
-				subject=subject,
-				message=message,
-				now=True,
-				reference_doctype="Process Statement Of Accounts",
-				reference_name=document_name,
-				attachments=attachments,
-			)
-
-		if doc.enable_auto_email and from_scheduler:
-			new_to_date = getdate(today())
-			if doc.frequency == "Weekly":
-				new_to_date = add_days(new_to_date, 7)
-			else:
-				new_to_date = add_months(new_to_date, 1 if doc.frequency == "Monthly" else 3)
-			new_from_date = add_months(new_to_date, -1 * doc.filter_duration)
-			doc.add_comment(
-				"Comment", "Emails sent on: " + frappe.utils.format_datetime(frappe.utils.now())
-			)
-			doc.db_set("to_date", new_to_date, commit=True)
-			doc.db_set("from_date", new_from_date, commit=True)
-		return True
-	else:
+	if not (report := get_report_pdf(doc, consolidated=False)):
 		return False
+	for customer, report_pdf in report.items():
+		attachments = [{"fname": f"{customer}.pdf", "fcontent": report_pdf}]
+
+		recipients, cc = get_recipients_and_cc(customer, doc)
+		if not recipients:
+			continue
+		context = get_context(customer, doc)
+		subject = frappe.render_template(doc.subject, context)
+		message = frappe.render_template(doc.body, context)
+
+		frappe.enqueue(
+			queue="short",
+			method=frappe.sendmail,
+			recipients=recipients,
+			sender=frappe.session.user,
+			cc=cc,
+			subject=subject,
+			message=message,
+			now=True,
+			reference_doctype="Process Statement Of Accounts",
+			reference_name=document_name,
+			attachments=attachments,
+		)
+
+	if doc.enable_auto_email and from_scheduler:
+		new_to_date = getdate(today())
+		new_to_date = (
+			add_days(new_to_date, 7)
+			if doc.frequency == "Weekly"
+			else add_months(new_to_date, 1 if doc.frequency == "Monthly" else 3)
+		)
+		new_from_date = add_months(new_to_date, -1 * doc.filter_duration)
+		doc.add_comment(
+			"Comment",
+			f"Emails sent on: {frappe.utils.format_datetime(frappe.utils.now())}",
+		)
+		doc.db_set("to_date", new_to_date, commit=True)
+		doc.db_set("from_date", new_from_date, commit=True)
+	return True
 
 
 @frappe.whitelist()

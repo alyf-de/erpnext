@@ -17,7 +17,7 @@ test_dependencies = ["Customer", "Supplier", "Accounting Dimension"]
 
 class TestOpeningInvoiceCreationTool(FrappeTestCase):
 	@classmethod
-	def setUpClass(self):
+	def setUpClass(cls):
 		if not frappe.db.exists("Company", "_Test Opening Invoice Company"):
 			make_company()
 		create_dimension()
@@ -218,8 +218,7 @@ def make_customer(customer=None):
 			"territory": "All Territories",
 		}
 	)
-	if not frappe.db.exists("Customer", customer_name):
-		customer.insert(ignore_permissions=True)
-		return customer.name
-	else:
+	if frappe.db.exists("Customer", customer_name):
 		return frappe.db.exists("Customer", customer_name)
+	customer.insert(ignore_permissions=True)
+	return customer.name

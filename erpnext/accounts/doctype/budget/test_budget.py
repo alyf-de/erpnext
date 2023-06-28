@@ -220,10 +220,8 @@ class TestBudget(unittest.TestCase):
 
 		budget = make_budget(budget_against="Cost Center")
 		month = now_datetime().month
-		if month > 9:
-			month = 9
-
-		for i in range(month + 1):
+		month = min(month, 9)
+		for _ in range(month + 1):
 			jv = make_journal_entry(
 				"_Test Account Cost for Goods Sold - _TC",
 				"_Test Bank - _TC",
@@ -251,11 +249,9 @@ class TestBudget(unittest.TestCase):
 
 		budget = make_budget(budget_against="Project")
 		month = now_datetime().month
-		if month > 9:
-			month = 9
-
+		month = min(month, 9)
 		project = frappe.get_value("Project", {"project_name": "_Test Project"})
-		for i in range(month + 1):
+		for _ in range(month + 1):
 			jv = make_journal_entry(
 				"_Test Account Cost for Goods Sold - _TC",
 				"_Test Bank - _TC",
@@ -390,9 +386,7 @@ def set_total_expense_zero(posting_date, budget_against_field=None, budget_again
 	if not args.get(budget_against_field):
 		args[budget_against_field] = budget_against
 
-	existing_expense = get_actual_expense(args)
-
-	if existing_expense:
+	if existing_expense := get_actual_expense(args):
 		if budget_against_field == "cost_center":
 			make_journal_entry(
 				"_Test Account Cost for Goods Sold - _TC",
@@ -423,10 +417,12 @@ def make_budget(**args):
 	fiscal_year = get_fiscal_year(nowdate())[0]
 
 	if budget_against == "Project":
-		project_name = "{0}%".format("_Test Project/" + fiscal_year)
+		project_name = "{0}%".format(f"_Test Project/{fiscal_year}")
 		budget_list = frappe.get_all("Budget", fields=["name"], filters={"name": ("like", project_name)})
 	else:
-		cost_center_name = "{0}%".format(cost_center or "_Test Cost Center - _TC/" + fiscal_year)
+		cost_center_name = "{0}%".format(
+			cost_center or f"_Test Cost Center - _TC/{fiscal_year}"
+		)
 		budget_list = frappe.get_all(
 			"Budget", fields=["name"], filters={"name": ("like", cost_center_name)}
 		)

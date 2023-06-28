@@ -74,15 +74,13 @@ def make_dimension_in_accounting_doctypes(doc, doclist=None):
 		doclist = get_doctypes_with_dimensions()
 
 	doc_count = len(get_accounting_dimensions())
-	count = 0
+	for count, doctype in enumerate(doclist, start=1):
 
-	for doctype in doclist:
-
-		if (doc_count + 1) % 2 == 0:
-			insert_after_field = "dimension_col_break"
-		else:
-			insert_after_field = "accounting_dimensions_section"
-
+		insert_after_field = (
+			"dimension_col_break"
+			if (doc_count + 1) % 2 == 0
+			else "accounting_dimensions_section"
+		)
 		df = {
 			"fieldname": doc.fieldname,
 			"label": doc.label,
@@ -101,8 +99,6 @@ def make_dimension_in_accounting_doctypes(doc, doclist=None):
 			else:
 				create_custom_field(doctype, df, ignore_validate=True)
 
-		count += 1
-
 		frappe.publish_progress(count * 100 / len(doclist), title=_("Creating Dimensions..."))
 		frappe.clear_cache(doctype=doctype)
 
@@ -117,9 +113,9 @@ def add_dimension_to_budget_doctype(df, doc):
 
 	create_custom_field("Budget", df, ignore_validate=True)
 
-	property_setter = frappe.db.exists("Property Setter", "Budget-budget_against-options")
-
-	if property_setter:
+	if property_setter := frappe.db.exists(
+		"Property Setter", "Budget-budget_against-options"
+	):
 		property_setter_doc = frappe.get_doc("Property Setter", "Budget-budget_against-options")
 		property_setter_doc.value = property_setter_doc.value + "\n" + doc.document_type
 		property_setter_doc.save()
@@ -184,16 +180,13 @@ def disable_dimension(doc):
 def toggle_disabling(doc):
 	doc = json.loads(doc)
 
-	if doc.get("disabled"):
-		df = {"read_only": 1}
-	else:
-		df = {"read_only": 0}
-
+	df = {"read_only": 1} if doc.get("disabled") else {"read_only": 0}
 	doclist = get_doctypes_with_dimensions()
 
 	for doctype in doclist:
-		field = frappe.db.get_value("Custom Field", {"dt": doctype, "fieldname": doc.get("fieldname")})
-		if field:
+		if field := frappe.db.get_value(
+			"Custom Field", {"dt": doctype, "fieldname": doc.get("fieldname")}
+		):
 			custom_field = frappe.get_doc("Custom Field", field)
 			custom_field.update(df)
 			custom_field.save()
@@ -224,14 +217,12 @@ def get_accounting_dimensions(as_list=True, filters=None):
 
 
 def get_checks_for_pl_and_bs_accounts():
-	dimensions = frappe.db.sql(
+	return frappe.db.sql(
 		"""SELECT p.label, p.disabled, p.fieldname, c.default_dimension, c.company, c.mandatory_for_pl, c.mandatory_for_bs
 		FROM `tabAccounting Dimension`p ,`tabAccounting Dimension Detail` c
 		WHERE p.name = c.parent""",
 		as_dict=1,
 	)
-
-	return dimensions
 
 
 def get_dimension_with_children(doctype, dimensions):

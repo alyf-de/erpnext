@@ -15,8 +15,7 @@ class TestPOSProfile(unittest.TestCase):
 	def test_pos_profile(self):
 		make_pos_profile()
 
-		pos_profile = get_pos_profile("_Test Company") or {}
-		if pos_profile:
+		if pos_profile := get_pos_profile("_Test Company") or {}:
 			doc = frappe.get_doc("POS Profile", pos_profile.get("name"))
 			doc.append("item_groups", {"item_group": "_Test Item Group"})
 			doc.append("customer_groups", {"customer_group": "_Test Customer Group"})
@@ -48,7 +47,7 @@ def get_customers_list(pos_profile=None):
 			customer_groups.extend(
 				[d.get("name") for d in get_child_nodes("Customer Group", d.get("customer_group"))]
 			)
-		cond = "customer_group in (%s)" % (", ".join(["%s"] * len(customer_groups)))
+		cond = f'customer_group in ({", ".join(["%s"] * len(customer_groups))})'
 
 	return (
 		frappe.db.sql(
@@ -72,7 +71,7 @@ def get_items_list(pos_profile, company):
 		for d in pos_profile.get("item_groups"):
 			args_list.extend([d.name for d in get_child_nodes("Item Group", d.item_group)])
 		if args_list:
-			cond = "and i.item_group in (%s)" % (", ".join(["%s"] * len(args_list)))
+			cond = f'and i.item_group in ({", ".join(["%s"] * len(args_list))})'
 
 	return frappe.db.sql(
 		"""

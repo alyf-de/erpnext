@@ -8,7 +8,7 @@ from frappe.model.document import Document
 
 class PaymentGatewayAccount(Document):
 	def autoname(self):
-		self.name = self.payment_gateway + " - " + self.currency
+		self.name = f"{self.payment_gateway} - {self.currency}"
 
 	def validate(self):
 		self.currency = frappe.get_cached_value("Account", self.payment_account, "account_currency")

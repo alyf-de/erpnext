@@ -57,8 +57,7 @@ def get_data(filters):
 	assets_details = get_assets_details(assets)
 
 	for d in gl_entries:
-		asset_data = assets_details.get(d.against_voucher)
-		if asset_data:
+		if asset_data := assets_details.get(d.against_voucher):
 			if not asset_data.get("accumulated_depreciation_amount"):
 				asset_data.accumulated_depreciation_amount = d.debit
 			else:

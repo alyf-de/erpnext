@@ -30,7 +30,9 @@ def docs_link_exists(body):
 
 if __name__ == "__main__":
 	pr = sys.argv[1]
-	response = requests.get("https://api.github.com/repos/frappe/erpnext/pulls/{}".format(pr))
+	response = requests.get(
+		f"https://api.github.com/repos/frappe/erpnext/pulls/{pr}"
+	)
 
 	if response.ok:
 		payload = response.json()

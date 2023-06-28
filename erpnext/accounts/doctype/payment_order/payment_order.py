@@ -18,10 +18,7 @@ class PaymentOrder(Document):
 		self.update_payment_status(cancel=True)
 
 	def update_payment_status(self, cancel=False):
-		status = "Payment Ordered"
-		if cancel:
-			status = "Initiated"
-
+		status = "Initiated" if cancel else "Payment Ordered"
 		if self.payment_order_type == "Payment Request":
 			ref_field = "status"
 			ref_doc_field = frappe.scrub(self.payment_order_type)

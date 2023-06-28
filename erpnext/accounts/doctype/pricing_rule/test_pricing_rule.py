@@ -1151,9 +1151,9 @@ def make_pricing_rule(**args):
 			doc.set(field, args.get(field))
 
 	apply_on = doc.apply_on.replace(" ", "_").lower()
-	child_table = {"Item Code": "items", "Item Group": "item_groups", "Brand": "brands"}
-
 	if doc.apply_on != "Transaction":
+		child_table = {"Item Code": "items", "Item Group": "item_groups", "Brand": "brands"}
+
 		doc.append(child_table.get(doc.apply_on), {apply_on: args.get(apply_on) or "_Test Item"})
 
 	doc.insert(ignore_permissions=True)

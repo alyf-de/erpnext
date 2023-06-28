@@ -26,17 +26,21 @@ class BankStatementImport(DataImport):
 	def validate(self):
 		doc_before_save = self.get_doc_before_save()
 		if (
-			not (self.import_file or self.google_sheets_url)
+			not self.import_file
+			and not self.google_sheets_url
 			or (doc_before_save and doc_before_save.import_file != self.import_file)
-			or (doc_before_save and doc_before_save.google_sheets_url != self.google_sheets_url)
+			or (
+				doc_before_save
+				and doc_before_save.google_sheets_url != self.google_sheets_url
+			)
 		):
 
-			template_options_dict = {}
-			column_to_field_map = {}
 			bank = frappe.get_doc("Bank", self.bank)
-			for i in bank.bank_transaction_mapping:
-				column_to_field_map[i.file_field] = i.bank_transaction_field
-			template_options_dict["column_to_field_map"] = column_to_field_map
+			column_to_field_map = {
+				i.file_field: i.bank_transaction_field
+				for i in bank.bank_transaction_mapping
+			}
+			template_options_dict = {"column_to_field_map": column_to_field_map}
 			self.template_options = json.dumps(template_options_dict)
 
 			self.template_warnings = ""
@@ -98,16 +102,7 @@ def download_errored_template(data_import_name):
 
 
 def parse_data_from_template(raw_data):
-	data = []
-
-	for i, row in enumerate(raw_data):
-		if all(v in INVALID_VALUES for v in row):
-			# empty row
-			continue
-
-		data.append(row)
-
-	return data
+	return [row for row in raw_data if any(v not in INVALID_VALUES for v in row)]
 
 
 def start_import(
@@ -178,7 +173,7 @@ def write_files(import_file, data):
 		with open(full_file_path, "w", newline="") as file:
 			writer = csv.writer(file)
 			writer.writerows(data)
-	elif extension == "xlsx" or "xls":
+	else:
 		write_xlsx(data, "trans", file_path=full_file_path)
 
 

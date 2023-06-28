@@ -28,14 +28,11 @@ def validate_service_stop_date(doc):
 		"enable_deferred_revenue" if doc.doctype == "Sales Invoice" else "enable_deferred_expense"
 	)
 
-	old_stop_dates = {}
 	old_doc = frappe.db.get_all(
 		"{0} Item".format(doc.doctype), {"parent": doc.name}, ["name", "service_stop_date"]
 	)
 
-	for d in old_doc:
-		old_stop_dates[d.name] = d.service_stop_date or ""
-
+	old_stop_dates = {d.name: d.service_stop_date or "" for d in old_doc}
 	for item in doc.items:
 		if not item.get(enable_check):
 			continue
@@ -62,7 +59,7 @@ def build_conditions(process_type, account, company):
 	)
 
 	if account:
-		conditions += "AND %s='%s'" % (deferred_account, account)
+		conditions += f"AND {deferred_account}='{account}'"
 	elif company:
 		conditions += f"AND p.company = {frappe.db.escape(company)}"
 
@@ -157,20 +154,25 @@ def get_booking_dates(doc, item, posting_date=None):
 		as_dict=True,
 	)
 
-	prev_gl_via_je = frappe.db.sql(
+	if prev_gl_via_je := frappe.db.sql(
 		"""
 		SELECT p.name, p.posting_date FROM `tabJournal Entry` p, `tabJournal Entry Account` c
 		WHERE p.name = c.parent and p.company=%s and c.account=%s
 		and c.reference_type=%s and c.reference_name=%s
 		and c.reference_detail_no=%s and c.docstatus < 2 order by posting_date desc limit 1
 	""",
-		(doc.company, item.get(deferred_account), doc.doctype, doc.name, item.name),
+		(
+			doc.company,
+			item.get(deferred_account),
+			doc.doctype,
+			doc.name,
+			item.name,
+		),
 		as_dict=True,
-	)
-
-	if prev_gl_via_je:
-		if (not prev_gl_entry) or (
-			prev_gl_entry and prev_gl_entry[0].posting_date < prev_gl_via_je[0].posting_date
+	):
+		if (
+			not prev_gl_entry
+			or prev_gl_entry[0].posting_date < prev_gl_via_je[0].posting_date
 		):
 			prev_gl_entry = prev_gl_via_je
 
@@ -229,7 +231,10 @@ def calculate_monthly_amount(
 			if amount + already_booked_amount_in_account_currency > item.net_amount:
 				amount = item.net_amount - already_booked_amount_in_account_currency
 
-		if not (get_first_day(start_date) == start_date and get_last_day(end_date) == end_date):
+		if (
+			get_first_day(start_date) != start_date
+			or get_last_day(end_date) != end_date
+		):
 			partial_month = flt(date_diff(end_date, start_date)) / flt(
 				date_diff(get_last_day(end_date), get_first_day(start_date))
 			)
@@ -494,8 +499,7 @@ def make_gl_entries(
 	if amount == 0:
 		return
 
-	gl_entries = []
-	gl_entries.append(
+	gl_entries = [
 		doc.get_gl_dict(
 			{
 				"account": credit_account,
@@ -512,7 +516,7 @@ def make_gl_entries(
 			account_currency,
 			item=item,
 		)
-	)
+	]
 	# GL Entry to debit the amount from the expense
 	gl_entries.append(
 		doc.get_gl_dict(
@@ -608,9 +612,9 @@ def book_revenue_via_journal_entry(
 	}
 
 	for dimension in get_accounting_dimensions():
-		debit_entry.update({dimension: item.get(dimension)})
+		debit_entry[dimension] = item.get(dimension)
 
-		credit_entry.update({dimension: item.get(dimension)})
+		credit_entry[dimension] = item.get(dimension)
 
 	journal_entry.append("accounts", debit_entry)
 	journal_entry.append("accounts", credit_entry)
@@ -643,7 +647,4 @@ def get_deferred_booking_accounts(doctype, voucher_detail_no, dr_or_cr):
 			["deferred_expense_account", "expense_account"],
 		)
 
-	if dr_or_cr == "Debit":
-		return debit_account
-	else:
-		return credit_account
+	return debit_account if dr_or_cr == "Debit" else credit_account

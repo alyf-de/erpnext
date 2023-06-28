@@ -248,7 +248,11 @@ class JournalEntry(AccountsController):
 				)
 
 		invoice_discounting_list = list(
-			set([d.reference_name for d in self.accounts if d.reference_type == "Invoice Discounting"])
+			{
+				d.reference_name
+				for d in self.accounts
+				if d.reference_type == "Invoice Discounting"
+			}
 		)
 		for inv_disc in invoice_discounting_list:
 			inv_disc_doc = frappe.get_doc("Invoice Discounting", inv_disc)
@@ -330,14 +334,13 @@ class JournalEntry(AccountsController):
 					)
 
 	def check_credit_limit(self):
-		customers = list(
-			set(
+		if customers := list(
+			{
 				d.party
 				for d in self.get("accounts")
 				if d.party_type == "Customer" and d.party and flt(d.debit) > 0
-			)
-		)
-		if customers:
+			}
+		):
 			from erpnext.selling.doctype.customer.customer import check_credit_limit
 
 			for customer in customers:
@@ -400,22 +403,14 @@ class JournalEntry(AccountsController):
 				if d.reference_name == self.name:
 					frappe.throw(_("You can not enter current voucher in 'Against Journal Entry' column"))
 
-				against_entries = frappe.db.sql(
+				if against_entries := frappe.db.sql(
 					"""select * from `tabJournal Entry Account`
 					where account = %s and docstatus = 1 and parent = %s
 					and (reference_type is null or reference_type in ('', 'Sales Order', 'Purchase Order'))
 					""",
 					(d.account, d.reference_name),
 					as_dict=True,
-				)
-
-				if not against_entries:
-					frappe.throw(
-						_(
-							"Journal Entry {0} does not have account {1} or already matched against other voucher"
-						).format(d.reference_name, d.account)
-					)
-				else:
+				):
 					dr_or_cr = "debit" if d.credit > 0 else "credit"
 					valid = False
 					for jvd in against_entries:
@@ -427,6 +422,13 @@ class JournalEntry(AccountsController):
 								d.reference_name, dr_or_cr
 							)
 						)
+
+				else:
+					frappe.throw(
+						_(
+							"Journal Entry {0} does not have account {1} or already matched against other voucher"
+						).format(d.reference_name, d.account)
+					)
 
 	def validate_reference_doc(self):
 		"""Validates reference document"""
@@ -465,7 +467,7 @@ class JournalEntry(AccountsController):
 					)
 
 				# set totals
-				if not d.reference_name in self.reference_totals:
+				if d.reference_name not in self.reference_totals:
 					self.reference_totals[d.reference_name] = 0.0
 
 				if self.voucher_type not in ("Deferred Revenue", "Deferred Expense"):
@@ -489,13 +491,12 @@ class JournalEntry(AccountsController):
 							d.reference_type, d.reference_detail_no, debit_or_credit
 						)
 						against_voucher = ["", against_voucher[1]]
+					elif d.reference_type == "Sales Invoice":
+						party_account = (
+							get_party_account_based_on_invoice_discounting(d.reference_name) or against_voucher[1]
+						)
 					else:
-						if d.reference_type == "Sales Invoice":
-							party_account = (
-								get_party_account_based_on_invoice_discounting(d.reference_name) or against_voucher[1]
-							)
-						else:
-							party_account = against_voucher[1]
+						party_account = against_voucher[1]
 
 					if against_voucher[0] != cstr(d.party) or party_account != d.account:
 						frappe.throw(
@@ -525,8 +526,6 @@ class JournalEntry(AccountsController):
 		"""Validate totals, closed and docstatus for orders"""
 		for reference_name, total in self.reference_totals.items():
 			reference_type = self.reference_types[reference_name]
-			account = self.reference_accounts[reference_name]
-
 			if reference_type in ("Sales Order", "Purchase Order"):
 				order = frappe.get_doc(reference_type, reference_name)
 
@@ -538,6 +537,8 @@ class JournalEntry(AccountsController):
 
 				if cstr(order.status) == "Closed":
 					frappe.throw(_("{0} {1} is closed").format(reference_type, reference_name))
+
+				account = self.reference_accounts[reference_name]
 
 				account_currency = get_account_currency(account)
 				if account_currency == self.company_currency:
@@ -585,11 +586,7 @@ class JournalEntry(AccountsController):
 		accounts_debited, accounts_credited = [], []
 		if self.voucher_type in ("Deferred Revenue", "Deferred Expense"):
 			for d in self.get("accounts"):
-				if d.reference_type == "Sales Invoice":
-					field = "customer"
-				else:
-					field = "supplier"
-
+				field = "customer" if d.reference_type == "Sales Invoice" else "supplier"
 				d.against_account = frappe.db.get_value(d.reference_type, d.reference_name, field)
 		else:
 			for d in self.get("accounts"):
@@ -634,10 +631,9 @@ class JournalEntry(AccountsController):
 	def validate_multi_currency(self):
 		alternate_currency = []
 		for d in self.get("accounts"):
-			account = frappe.get_cached_value(
+			if account := frappe.get_cached_value(
 				"Account", d.account, ["account_currency", "account_type"], as_dict=1
-			)
-			if account:
+			):
 				d.account_currency = account.account_currency
 				d.account_type = account.account_type
 
@@ -831,13 +827,12 @@ class JournalEntry(AccountsController):
 	def make_gl_entries(self, cancel=0, adv_adj=0):
 		from erpnext.accounts.general_ledger import make_gl_entries
 
-		gl_map = self.build_gl_map()
-		if self.voucher_type in ("Deferred Revenue", "Deferred Expense"):
-			update_outstanding = "No"
-		else:
-			update_outstanding = "Yes"
-
-		if gl_map:
+		if gl_map := self.build_gl_map():
+			update_outstanding = (
+				"No"
+				if self.voucher_type in ("Deferred Revenue", "Deferred Expense")
+				else "Yes"
+			)
 			make_gl_entries(gl_map, cancel=cancel, adv_adj=adv_adj, update_outstanding=update_outstanding)
 
 	@frappe.whitelist()
@@ -846,10 +841,7 @@ class JournalEntry(AccountsController):
 			msgprint(_("'Entries' cannot be empty"), raise_exception=True)
 		else:
 			self.total_debit, self.total_credit = 0, 0
-			diff = flt(self.difference, self.precision("difference"))
-
-			# If any row without amount, set the diff on that row
-			if diff:
+			if diff := flt(self.difference, self.precision("difference")):
 				blank_row = None
 				for d in self.get("accounts"):
 					if not d.credit_in_account_currency and not d.debit_in_account_currency and diff != 0:
@@ -1141,11 +1133,9 @@ def get_payment_entry(ref_doc, args):
 
 	bank_row = je.append("accounts")
 
-	# Make it bank_details
-	bank_account = get_default_bank_cash_account(
+	if bank_account := get_default_bank_cash_account(
 		ref_doc.company, "Bank", account=args.get("bank_account")
-	)
-	if bank_account:
+	):
 		bank_row.update(bank_account)
 		# Modified to include the posting date for which the exchange rate is required.
 		# Assumed to be the posting date of the reference date
@@ -1374,17 +1364,14 @@ def get_exchange_rate(
 
 	company_currency = erpnext.get_company_currency(company)
 
-	if account_currency != company_currency:
-		if reference_type in ("Sales Invoice", "Purchase Invoice") and reference_name:
-			exchange_rate = frappe.db.get_value(reference_type, reference_name, "conversion_rate")
-
-		# The date used to retreive the exchange rate here is the date passed
-		# in as an argument to this function.
-		elif (not exchange_rate or flt(exchange_rate) == 1) and account_currency and posting_date:
-			exchange_rate = get_exchange_rate(account_currency, company_currency, posting_date)
-	else:
+	if account_currency == company_currency:
 		exchange_rate = 1
 
+	elif reference_type in ("Sales Invoice", "Purchase Invoice") and reference_name:
+		exchange_rate = frappe.db.get_value(reference_type, reference_name, "conversion_rate")
+
+	elif (not exchange_rate or flt(exchange_rate) == 1) and account_currency and posting_date:
+		exchange_rate = get_exchange_rate(account_currency, company_currency, posting_date)
 	# don't return None or 0 as it is multipled with a value and that value could be lost
 	return exchange_rate or 1
 
@@ -1392,8 +1379,7 @@ def get_exchange_rate(
 @frappe.whitelist()
 def get_average_exchange_rate(account):
 	exchange_rate = 0
-	bank_balance_in_account_currency = get_balance_on(account)
-	if bank_balance_in_account_currency:
+	if bank_balance_in_account_currency := get_balance_on(account):
 		bank_balance_in_company_currency = get_balance_on(account, in_account_currency=False)
 		exchange_rate = bank_balance_in_company_currency / bank_balance_in_account_currency
 

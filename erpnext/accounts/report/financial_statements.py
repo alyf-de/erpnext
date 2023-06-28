@@ -63,13 +63,7 @@ def get_period_list(
 		# Subtract one day from to_date, as it may be first day in next fiscal year or month
 		to_date = add_days(to_date, -1)
 
-		if to_date <= year_end_date:
-			# the normal case
-			period.to_date = to_date
-		else:
-			# if a fiscal year ends before a 12 month period
-			period.to_date = year_end_date
-
+		period.to_date = to_date if to_date <= year_end_date else year_end_date
 		if not ignore_fiscal_year:
 			period.to_date_fiscal_year = get_fiscal_year(period.to_date, company=company)[0]
 			period.from_date_fiscal_year_start_date = get_fiscal_year(period.from_date, company=company)[1]
@@ -84,15 +78,16 @@ def get_period_list(
 		key = opts["to_date"].strftime("%b_%Y").lower()
 		if periodicity == "Monthly" and not accumulated_values:
 			label = formatdate(opts["to_date"], "MMM YYYY")
+		elif accumulated_values:
+			label = (
+				get_label(
+					periodicity, opts.from_date_fiscal_year_start_date, opts["to_date"]
+				)
+				if reset_period_on_fy_change
+				else get_label(periodicity, period_list[0].from_date, opts["to_date"])
+			)
 		else:
-			if not accumulated_values:
-				label = get_label(periodicity, opts["from_date"], opts["to_date"])
-			else:
-				if reset_period_on_fy_change:
-					label = get_label(periodicity, opts.from_date_fiscal_year_start_date, opts["to_date"])
-				else:
-					label = get_label(periodicity, period_list[0].from_date, opts["to_date"])
-
+			label = get_label(periodicity, opts["from_date"], opts["to_date"])
 		opts.update(
 			{
 				"key": key.replace(" ", "_").replace("-", "_"),
@@ -140,14 +135,13 @@ def get_months(start_date, end_date):
 
 def get_label(periodicity, from_date, to_date):
 	if periodicity == "Yearly":
-		if formatdate(from_date, "YYYY") == formatdate(to_date, "YYYY"):
-			label = formatdate(from_date, "YYYY")
-		else:
-			label = formatdate(from_date, "YYYY") + "-" + formatdate(to_date, "YYYY")
+		return (
+			formatdate(from_date, "YYYY")
+			if formatdate(from_date, "YYYY") == formatdate(to_date, "YYYY")
+			else formatdate(from_date, "YYYY") + "-" + formatdate(to_date, "YYYY")
+		)
 	else:
-		label = formatdate(from_date, "MMM YY") + "-" + formatdate(to_date, "MMM YY")
-
-	return label
+		return formatdate(from_date, "MMM YY") + "-" + formatdate(to_date, "MMM YY")
 
 
 def get_data(
@@ -277,12 +271,11 @@ def prepare_data(accounts, balance_must_be, period_list, company_currency):
 				"include_in_gross": d.include_in_gross,
 				"account_type": d.account_type,
 				"is_group": d.is_group,
-				"opening_balance": d.get("opening_balance", 0.0) * (1 if balance_must_be == "Debit" else -1),
-				"account_name": (
-					"%s - %s" % (_(d.account_number), _(d.account_name))
-					if d.account_number
-					else _(d.account_name)
-				),
+				"opening_balance": d.get("opening_balance", 0.0)
+				* (1 if balance_must_be == "Debit" else -1),
+				"account_name": f"{_(d.account_number)} - {_(d.account_name)}"
+				if d.account_number
+				else _(d.account_name),
 			}
 		)
 		for period in period_list:
@@ -309,14 +302,13 @@ def filter_out_zero_value_rows(data, parent_children_map, show_zero_values=False
 	for d in data:
 		if show_zero_values or d.get("has_value"):
 			data_with_value.append(d)
-		else:
-			# show group with zero balance, if there are balances against child
-			children = [child.name for child in parent_children_map.get(d.get("account")) or []]
-			if children:
-				for row in data:
-					if row.get("account") in children and row.get("has_value"):
-						data_with_value.append(d)
-						break
+		elif children := [
+			child.name for child in parent_children_map.get(d.get("account")) or []
+		]:
+			for row in data:
+				if row.get("account") in children and row.get("has_value"):
+					data_with_value.append(d)
+					break
 
 	return data_with_value
 
@@ -371,7 +363,7 @@ def filter_accounts(accounts, depth=20):
 	def add_to_list(parent, level):
 		if level < depth:
 			children = parent_children_map.get(parent) or []
-			sort_accounts(children, is_root=True if parent == None else False)
+			sort_accounts(children, is_root=parent is None)
 
 			for child in children:
 				child.indent = level
@@ -421,15 +413,13 @@ def set_gl_entries_by_account(
 
 	additional_conditions = get_additional_conditions(from_date, ignore_closing_entries, filters)
 
-	accounts = frappe.db.sql_list(
+	if accounts := frappe.db.sql_list(
 		"""select name from `tabAccount`
 		where lft >= %s and rgt <= %s and company = %s""",
 		(root_lft, root_rgt, company),
-	)
-
-	if accounts:
-		additional_conditions += " and account in ({})".format(
-			", ".join(frappe.db.escape(d) for d in accounts)
+	):
+		additional_conditions += (
+			f' and account in ({", ".join(frappe.db.escape(d) for d in accounts)})'
 		)
 
 		gl_filters = {
@@ -444,7 +434,7 @@ def set_gl_entries_by_account(
 
 		for key, value in filters.items():
 			if value:
-				gl_filters.update({key: value})
+				gl_filters[key] = value
 
 		gl_entries = frappe.db.sql(
 			"""
@@ -505,11 +495,12 @@ def get_additional_conditions(from_date, ignore_closing_entries, filters):
 					filters[dimension.fieldname] = get_dimension_with_children(
 						dimension.document_type, filters.get(dimension.fieldname)
 					)
-					additional_conditions.append("{0} in %({0})s".format(dimension.fieldname))
-				else:
-					additional_conditions.append("{0} in %({0})s".format(dimension.fieldname))
-
-	return " and {}".format(" and ".join(additional_conditions)) if additional_conditions else ""
+				additional_conditions.append("{0} in %({0})s".format(dimension.fieldname))
+	return (
+		f' and {" and ".join(additional_conditions)}'
+		if additional_conditions
+		else ""
+	)
 
 
 def get_cost_centers_with_children(cost_centers):
@@ -548,16 +539,16 @@ def get_columns(periodicity, period_list, accumulated_values=1, company=None):
 				"hidden": 1,
 			}
 		)
-	for period in period_list:
-		columns.append(
-			{
-				"fieldname": period.key,
-				"label": period.label,
-				"fieldtype": "Currency",
-				"options": "currency",
-				"width": 150,
-			}
-		)
+	columns.extend(
+		{
+			"fieldname": period.key,
+			"label": period.label,
+			"fieldtype": "Currency",
+			"options": "currency",
+			"width": 150,
+		}
+		for period in period_list
+	)
 	if periodicity != "Yearly":
 		if not accumulated_values:
 			columns.append(
@@ -568,9 +559,4 @@ def get_columns(periodicity, period_list, accumulated_values=1, company=None):
 
 
 def get_filtered_list_for_consolidated_report(filters, period_list):
-	filtered_summary_list = []
-	for period in period_list:
-		if period == filters.get("company"):
-			filtered_summary_list.append(period)
-
-	return filtered_summary_list
+	return [period for period in period_list if period == filters.get("company")]

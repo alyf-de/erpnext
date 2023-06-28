@@ -14,7 +14,7 @@ from erpnext.accounts.party import get_dashboard_info
 
 class TestLoyaltyProgram(unittest.TestCase):
 	@classmethod
-	def setUpClass(self):
+	def setUpClass(cls):
 		# create relevant item, customer, loyalty program, etc
 		create_records()
 
@@ -140,7 +140,7 @@ class TestLoyaltyProgram(unittest.TestCase):
 			"Loyalty Point Entry",
 			{"invoice_type": "Sales Invoice", "invoice": si.name, "customer": si.customer},
 		)
-		self.assertEqual(True, not (lpe is None))
+		self.assertEqual(True, lpe is not None)
 
 		# cancelling sales invoice
 		si.cancel()

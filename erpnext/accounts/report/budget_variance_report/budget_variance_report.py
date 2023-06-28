@@ -26,8 +26,7 @@ def execute(filters=None):
 
 	data = []
 	for dimension in dimensions:
-		dimension_items = cam_map.get(dimension)
-		if dimension_items:
+		if dimension_items := cam_map.get(dimension):
 			data = get_final_data(dimension, dimension_items, filters, period_month_ranges, data, 0)
 
 	chart = get_chart_data(filters, columns, data)
@@ -88,7 +87,7 @@ def get_columns(filters):
 		},
 	]
 
-	group_months = False if filters["period"] == "Monthly" else True
+	group_months = filters["period"] != "Monthly"
 
 	fiscal_year = get_fiscal_years(filters)
 
@@ -100,10 +99,15 @@ def get_columns(filters):
 					_("Actual") + " " + str(year[0]),
 					_("Variance") + " " + str(year[0]),
 				]
-				for label in labels:
-					columns.append(
-						{"label": label, "fieldtype": "Float", "fieldname": frappe.scrub(label), "width": 150}
-					)
+				columns.extend(
+					{
+						"label": label,
+						"fieldtype": "Float",
+						"fieldname": frappe.scrub(label),
+						"width": 150,
+					}
+					for label in labels
+				)
 			else:
 				for label in [
 					_("Budget") + " (%s)" + " " + str(year[0]),
@@ -122,14 +126,16 @@ def get_columns(filters):
 					)
 
 	if filters["period"] != "Yearly":
-		for label in [_("Total Budget"), _("Total Actual"), _("Total Variance")]:
-			columns.append(
-				{"label": label, "fieldtype": "Float", "fieldname": frappe.scrub(label), "width": 150}
-			)
-
-		return columns
-	else:
-		return columns
+		columns.extend(
+			{
+				"label": label,
+				"fieldtype": "Float",
+				"fieldname": frappe.scrub(label),
+				"width": 150,
+			}
+			for label in [_("Total Budget"), _("Total Actual"), _("Total Variance")]
+		)
+	return columns
 
 
 def get_cost_centers(filters):
@@ -328,7 +334,7 @@ def get_dimension_account_month_map(filters):
 
 def get_fiscal_years(filters):
 
-	fiscal_year = frappe.db.sql(
+	return frappe.db.sql(
 		"""
 			select
 				name
@@ -337,10 +343,11 @@ def get_fiscal_years(filters):
 			where
 				name between %(from_fiscal_year)s and %(to_fiscal_year)s
 		""",
-		{"from_fiscal_year": filters["from_fiscal_year"], "to_fiscal_year": filters["to_fiscal_year"]},
+		{
+			"from_fiscal_year": filters["from_fiscal_year"],
+			"to_fiscal_year": filters["to_fiscal_year"],
+		},
 	)
-
-	return fiscal_year
 
 
 def get_chart_data(filters, columns, data):
@@ -351,7 +358,7 @@ def get_chart_data(filters, columns, data):
 	labels = []
 
 	fiscal_year = get_fiscal_years(filters)
-	group_months = False if filters["period"] == "Monthly" else True
+	group_months = filters["period"] != "Monthly"
 
 	for year in fiscal_year:
 		for from_date, to_date in get_period_date_ranges(filters["period"], year[0]):
@@ -362,11 +369,9 @@ def get_chart_data(filters, columns, data):
 					label = (
 						formatdate(from_date, format_string="MMM") + "-" + formatdate(to_date, format_string="MMM")
 					)
-					labels.append(label)
 				else:
 					label = formatdate(from_date, format_string="MMM")
-					labels.append(label)
-
+				labels.append(label)
 	no_of_columns = len(labels)
 
 	budget_values, actual_values = [0] * no_of_columns, [0] * no_of_columns

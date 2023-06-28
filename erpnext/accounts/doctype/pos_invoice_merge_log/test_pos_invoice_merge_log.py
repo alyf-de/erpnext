@@ -309,7 +309,7 @@ class TestPOSInvoiceMergeLog(unittest.TestCase):
 			init_user_and_profile()
 
 			item_rates = [69, 59, 29]
-			for i in [1, 2]:
+			for _ in [1, 2]:
 				inv = create_pos_invoice(is_return=1, do_not_save=1)
 				inv.items = []
 				for rate in item_rates:

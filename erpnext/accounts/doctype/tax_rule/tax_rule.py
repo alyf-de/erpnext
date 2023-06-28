@@ -88,21 +88,19 @@ class TaxRule(Document):
 				from_date=self.from_date, to_date=self.to_date
 			)
 
-		elif self.from_date and not self.to_date:
+		elif self.from_date:
 			conds += """ and to_date > '{from_date}'""".format(from_date=self.from_date)
 
-		elif self.to_date and not self.from_date:
+		elif self.to_date:
 			conds += """ and from_date < '{to_date}'""".format(to_date=self.to_date)
 
-		tax_rule = frappe.db.sql(
+		if tax_rule := frappe.db.sql(
 			"select name, priority \
 			from `tabTax Rule` where {0} and name != '{1}'".format(
 				conds, self.name
 			),
 			as_dict=1,
-		)
-
-		if tax_rule:
+		):
 			if tax_rule[0].priority == self.priority:
 				frappe.throw(_("Tax Rule Conflicts with {0}").format(tax_rule[0].name), ConflictingTaxRule)
 
@@ -224,10 +222,13 @@ def get_tax_template(posting_date, args):
 
 
 def get_customer_group_condition(customer_group):
-	condition = ""
-	customer_groups = [
-		"%s" % (frappe.db.escape(d.name)) for d in get_parent_customer_groups(customer_group)
-	]
-	if customer_groups:
-		condition = ",".join(["%s"] * len(customer_groups)) % (tuple(customer_groups))
-	return condition
+	return (
+		",".join(["%s"] * len(customer_groups)) % (tuple(customer_groups))
+		if (
+			customer_groups := [
+				f"{frappe.db.escape(d.name)}"
+				for d in get_parent_customer_groups(customer_group)
+			]
+		)
+		else ""
+	)

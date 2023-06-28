@@ -109,7 +109,7 @@ class POSProfile(Document):
 		frappe.defaults.clear_default("is_pos")
 
 		if not include_current_pos:
-			condition = " where pfu.name != '%s' and pfu.default = 1 " % self.name.replace("'", "'")
+			condition = f""" where pfu.name != '{self.name.replace("'", "'")}' and pfu.default = 1 """
 		else:
 			condition = " where pfu.default = 1 "
 
@@ -135,7 +135,10 @@ def get_item_groups(pos_profile):
 		# Get items based on the item groups defined in the POS profile
 		for data in pos_profile.get("item_groups"):
 			item_groups.extend(
-				["%s" % frappe.db.escape(d.name) for d in get_child_nodes("Item Group", data.item_group)]
+				[
+					f"{frappe.db.escape(d.name)}"
+					for d in get_child_nodes("Item Group", data.item_group)
+				]
 			)
 
 	return list(set(item_groups))
@@ -200,9 +203,9 @@ def pos_profile_query(doctype, txt, searchfield, start, page_len, filters):
 @frappe.whitelist()
 def set_default_profile(pos_profile, company):
 	modified = now()
-	user = frappe.session.user
-
 	if pos_profile and company:
+		user = frappe.session.user
+
 		frappe.db.sql(
 			""" update `tabPOS Profile User` pfu, `tabPOS Profile` pf
 			set

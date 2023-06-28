@@ -15,10 +15,7 @@ class ModeofPayment(Document):
 
 	def validate_repeating_companies(self):
 		"""Error when Same Company is entered multiple times in accounts"""
-		accounts_list = []
-		for entry in self.accounts:
-			accounts_list.append(entry.company)
-
+		accounts_list = [entry.company for entry in self.accounts]
 		if len(accounts_list) != len(set(accounts_list)):
 			frappe.throw(_("Same Company is entered more than once"))
 
@@ -39,9 +36,7 @@ class ModeofPayment(Document):
 				WHERE sip.parenttype = 'POS Profile' and sip.mode_of_payment = %s""",
 				(self.name),
 			)
-			pos_profiles = list(map(lambda x: x[0], pos_profiles))
-
-			if pos_profiles:
+			if pos_profiles := list(map(lambda x: x[0], pos_profiles)):
 				message = _(
 					"POS Profile {} contains Mode of Payment {}. Please remove them to disable this mode."
 				).format(frappe.bold(", ".join(pos_profiles)), frappe.bold(str(self.name)))

@@ -63,10 +63,10 @@ class PaymentLedgerEntry(Document):
 	def validate_allowed_dimensions(self):
 		dimension_filter_map = get_dimension_filter_map()
 		for key, value in dimension_filter_map.items():
-			dimension = key[0]
 			account = key[1]
 
 			if self.account == account:
+				dimension = key[0]
 				if value["is_mandatory"] and not self.get(dimension):
 					frappe.throw(
 						_("{0} is mandatory for account {1}").format(
@@ -85,16 +85,15 @@ class PaymentLedgerEntry(Document):
 							),
 							InvalidAccountDimensionError,
 						)
-				else:
-					if self.get(dimension) and self.get(dimension) in value["allowed_dimensions"]:
-						frappe.throw(
-							_("Invalid value {0} for {1} against account {2}").format(
-								frappe.bold(self.get(dimension)),
-								frappe.bold(frappe.unscrub(dimension)),
-								frappe.bold(self.account),
-							),
-							InvalidAccountDimensionError,
-						)
+				elif self.get(dimension) and self.get(dimension) in value["allowed_dimensions"]:
+					frappe.throw(
+						_("Invalid value {0} for {1} against account {2}").format(
+							frappe.bold(self.get(dimension)),
+							frappe.bold(frappe.unscrub(dimension)),
+							frappe.bold(self.account),
+						),
+						InvalidAccountDimensionError,
+					)
 
 	def validate_dimensions_for_pl_and_bs(self):
 		account_type = frappe.get_cached_value("Account", self.account, "report_type")

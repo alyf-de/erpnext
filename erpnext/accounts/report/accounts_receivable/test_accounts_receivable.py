@@ -28,10 +28,10 @@ class TestAccountsReceivable(FrappeTestCase):
 
 	def create_usd_account(self):
 		name = "Debtors USD"
-		exists = frappe.db.get_list(
-			"Account", filters={"company": "_Test Company 2", "account_name": "Debtors USD"}
-		)
-		if exists:
+		if exists := frappe.db.get_list(
+			"Account",
+			filters={"company": "_Test Company 2", "account_name": "Debtors USD"},
+		):
 			self.debtors_usd = exists[0].name
 		else:
 			debtors = frappe.get_doc(

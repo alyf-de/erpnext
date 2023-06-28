@@ -122,13 +122,13 @@ def get_gl_entries(account, to_date):
 
 def get_dates_from_timegrain(from_date, to_date, timegrain):
 	days = months = years = 0
-	if "Daily" == timegrain:
+	if timegrain == "Daily":
 		days = 1
-	elif "Weekly" == timegrain:
+	elif timegrain == "Weekly":
 		days = 7
-	elif "Monthly" == timegrain:
+	elif timegrain == "Monthly":
 		months = 1
-	elif "Quarterly" == timegrain:
+	elif timegrain == "Quarterly":
 		months = 3
 
 	dates = [get_period_ending(from_date, timegrain)]

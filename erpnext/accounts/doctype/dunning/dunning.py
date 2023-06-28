@@ -46,7 +46,6 @@ class Dunning(AccountsController):
 	def make_gl_entries(self):
 		if not self.dunning_amount:
 			return
-		gl_entries = []
 		invoice_fields = [
 			"project",
 			"cost_center",
@@ -63,7 +62,7 @@ class Dunning(AccountsController):
 		dunning_in_company_currency = flt(self.dunning_amount * inv.conversion_rate)
 		default_cost_center = frappe.get_cached_value("Company", self.company, "cost_center")
 
-		gl_entries.append(
+		gl_entries = [
 			self.get_gl_dict(
 				{
 					"account": inv.debit_to,
@@ -80,9 +79,7 @@ class Dunning(AccountsController):
 				},
 				inv.party_account_currency,
 				item=inv,
-			)
-		)
-		gl_entries.append(
+			),
 			self.get_gl_dict(
 				{
 					"account": self.income_account,
@@ -93,8 +90,8 @@ class Dunning(AccountsController):
 					"project": inv.project,
 				},
 				item=inv,
-			)
-		)
+			),
+		]
 		make_gl_entries(
 			gl_entries, cancel=(self.docstatus == 2), update_outstanding="No", merge_entries=False
 		)
@@ -136,10 +133,12 @@ def get_dunning_letter_text(dunning_type, doc, language=None):
 		filters = {"parent": dunning_type, "language": language}
 	else:
 		filters = {"parent": dunning_type, "is_default_language": 1}
-	letter_text = frappe.db.get_value(
-		"Dunning Letter Text", filters, ["body_text", "closing_text", "language"], as_dict=1
-	)
-	if letter_text:
+	if letter_text := frappe.db.get_value(
+		"Dunning Letter Text",
+		filters,
+		["body_text", "closing_text", "language"],
+		as_dict=1,
+	):
 		return {
 			"body_text": frappe.render_template(letter_text.body_text, doc),
 			"closing_text": frappe.render_template(letter_text.closing_text, doc),

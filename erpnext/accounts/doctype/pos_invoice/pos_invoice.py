@@ -183,9 +183,7 @@ class POSInvoice(SalesInvoice):
 			)
 
 	def validate_delivered_serial_nos(self, item):
-		delivered_serial_nos = get_delivered_serial_nos(item.serial_no)
-
-		if delivered_serial_nos:
+		if delivered_serial_nos := get_delivered_serial_nos(item.serial_no):
 			bold_delivered_serial_nos = frappe.bold(", ".join(delivered_serial_nos))
 			frappe.throw(
 				_(
@@ -277,7 +275,7 @@ class POSInvoice(SalesInvoice):
 				msg = _(
 					"Row #{}: No batch selected against item: {}. Please select a batch or remove it to complete transaction."
 				).format(d.idx, item_code)
-			elif serialized and not no_serial_selected and len(serial_nos) != d.qty:
+			elif serialized and len(serial_nos) != d.qty:
 				msg = _("Row #{}: You must select {} serial numbers for item {}.").format(
 					d.idx, frappe.bold(cint(d.qty)), item_code
 				)
@@ -620,26 +618,22 @@ class POSInvoice(SalesInvoice):
 			"payment_gateway_account": payment_gateway_account,
 			"email_to": self.contact_mobile,
 		}
-		pr = frappe.db.get_value("Payment Request", filters=filters)
-		if pr:
+		if pr := frappe.db.get_value("Payment Request", filters=filters):
 			return frappe.get_doc("Payment Request", pr)
 
 
 @frappe.whitelist()
 def get_stock_availability(item_code, warehouse):
-	if frappe.db.get_value("Item", item_code, "is_stock_item"):
-		is_stock_item = True
-		bin_qty = get_bin_qty(item_code, warehouse)
-		pos_sales_qty = get_pos_reserved_qty(item_code, warehouse)
-		return bin_qty - pos_sales_qty, is_stock_item
-	else:
-		is_stock_item = True
-		if frappe.db.exists("Product Bundle", item_code):
-			return get_bundle_availability(item_code, warehouse), is_stock_item
-		else:
-			is_stock_item = False
-			# Is a service item or non_stock item
-			return 0, is_stock_item
+	is_stock_item = True
+	if not frappe.db.get_value("Item", item_code, "is_stock_item"):
+		return (
+			(get_bundle_availability(item_code, warehouse), is_stock_item)
+			if frappe.db.exists("Product Bundle", item_code)
+			else (0, False)
+		)
+	bin_qty = get_bin_qty(item_code, warehouse)
+	pos_sales_qty = get_pos_reserved_qty(item_code, warehouse)
+	return bin_qty - pos_sales_qty, is_stock_item
 
 
 def get_bundle_availability(bundle_item_code, warehouse):

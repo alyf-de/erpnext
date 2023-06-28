@@ -134,7 +134,7 @@ class TestJournalEntry(unittest.TestCase):
 				"account": stock_account,
 				"cost_center": "Main - TCP1",
 				"debit_in_account_currency": 0 if diff > 0 else abs(diff),
-				"credit_in_account_currency": diff if diff > 0 else 0,
+				"credit_in_account_currency": max(diff, 0),
 			},
 		)
 
@@ -143,7 +143,7 @@ class TestJournalEntry(unittest.TestCase):
 			{
 				"account": "Stock Adjustment - TCP1",
 				"cost_center": "Main - TCP1",
-				"debit_in_account_currency": diff if diff > 0 else 0,
+				"debit_in_account_currency": max(diff, 0),
 				"credit_in_account_currency": 0 if diff > 0 else abs(diff),
 			},
 		)
@@ -199,7 +199,7 @@ class TestJournalEntry(unittest.TestCase):
 			"credit",
 			"credit_in_account_currency",
 		):
-			for i, gle in enumerate(gl_entries):
+			for gle in gl_entries:
 				self.assertEqual(expected_values[gle.account][field], gle[field])
 
 		# cancel
@@ -261,7 +261,7 @@ class TestJournalEntry(unittest.TestCase):
 			"credit",
 			"credit_in_account_currency",
 		):
-			for i, gle in enumerate(gl_entries):
+			for gle in gl_entries:
 				self.assertEqual(expected_values[gle.account][field], gle[field])
 
 	def test_disallow_change_in_account_currency_for_a_party(self):
@@ -455,7 +455,7 @@ def make_journal_entry(
 				"account": account1,
 				"cost_center": cost_center,
 				"project": project,
-				"debit_in_account_currency": amount if amount > 0 else 0,
+				"debit_in_account_currency": max(amount, 0),
 				"credit_in_account_currency": abs(amount) if amount < 0 else 0,
 				"exchange_rate": exchange_rate,
 			},
@@ -463,7 +463,7 @@ def make_journal_entry(
 				"account": account2,
 				"cost_center": cost_center,
 				"project": project,
-				"credit_in_account_currency": amount if amount > 0 else 0,
+				"credit_in_account_currency": max(amount, 0),
 				"debit_in_account_currency": abs(amount) if amount < 0 else 0,
 				"exchange_rate": exchange_rate,
 			},
@@ -472,8 +472,8 @@ def make_journal_entry(
 	if save or submit:
 		jv.insert()
 
-		if submit:
-			jv.submit()
+	if submit:
+		jv.submit()
 
 	return jv
 

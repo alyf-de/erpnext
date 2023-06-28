@@ -114,11 +114,11 @@ def create_dimension():
 		)
 
 		dimension1.insert()
-		dimension1.save()
 	else:
 		dimension1 = frappe.get_doc("Accounting Dimension", "Location")
 		dimension1.disabled = 0
-		dimension1.save()
+
+	dimension1.save()
 
 
 def disable_dimension():

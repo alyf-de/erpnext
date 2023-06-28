@@ -37,7 +37,7 @@ def get_mappers_from_db():
 def get_accounts_in_mappers(mapping_names):
 	cfm = frappe.qb.DocType("Cash Flow Mapping")
 	cfma = frappe.qb.DocType("Cash Flow Mapping Accounts")
-	result = (
+	return (
 		frappe.qb.select(
 			cfma.name,
 			cfm.label,
@@ -53,8 +53,6 @@ def get_accounts_in_mappers(mapping_names):
 		.on(cfm.name == cfma.parent)
 		.where(cfma.parent.isin(mapping_names))
 	).run()
-
-	return result
 
 
 def setup_mappers(mappers):
@@ -130,43 +128,54 @@ def setup_mappers(mappers):
 		]
 
 		account_types_labels = sorted(
-			set(
-				(d["label"], d["is_working_capital"], d["is_income_tax_liability"], d["is_income_tax_expense"])
+			{
+				(
+					d["label"],
+					d["is_working_capital"],
+					d["is_income_tax_liability"],
+					d["is_income_tax_expense"],
+				)
 				for d in account_types
-			),
+			},
 			key=lambda x: x[1],
 		)
 
 		fc_adjustment_labels = sorted(
-			set(
-				[
-					(d["label"], d["is_finance_cost"], d["is_finance_cost_adjustment"])
-					for d in finance_costs_adjustments
-					if d["is_finance_cost_adjustment"]
-				]
-			),
+			{
+				(d["label"], d["is_finance_cost"], d["is_finance_cost_adjustment"])
+				for d in finance_costs_adjustments
+				if d["is_finance_cost_adjustment"]
+			},
 			key=lambda x: x[2],
 		)
 
 		unique_liability_labels = sorted(
-			set(
-				[
-					(d["label"], d["is_income_tax_liability"], d["is_income_tax_expense"])
-					for d in tax_liabilities
-				]
-			),
+			{
+				(
+					d["label"],
+					d["is_income_tax_liability"],
+					d["is_income_tax_expense"],
+				)
+				for d in tax_liabilities
+			},
 			key=lambda x: x[0],
 		)
 
 		unique_expense_labels = sorted(
-			set(
-				[(d["label"], d["is_income_tax_liability"], d["is_income_tax_expense"]) for d in tax_expenses]
-			),
+			{
+				(
+					d["label"],
+					d["is_income_tax_liability"],
+					d["is_income_tax_expense"],
+				)
+				for d in tax_expenses
+			},
 			key=lambda x: x[0],
 		)
 
 		unique_finance_costs_labels = sorted(
-			set([(d["label"], d["is_finance_cost"]) for d in finance_costs]), key=lambda x: x[0]
+			{(d["label"], d["is_finance_cost"]) for d in finance_costs},
+			key=lambda x: x[0],
 		)
 
 		for label in account_types_labels:
@@ -275,15 +284,13 @@ def add_data_for_operating_activities(
 		]
 
 	for account in mapper["tax_liabilities"]:
-		tax_paid = calculate_adjustment(
+		if tax_paid := calculate_adjustment(
 			filters,
 			mapper["tax_liabilities"],
 			mapper["tax_expenses"],
 			filters.accumulated_values,
 			period_list,
-		)
-
-		if tax_paid:
+		):
 			tax_paid.update(
 				{
 					"parent_account": mapper["section_header"],
@@ -299,15 +306,13 @@ def add_data_for_operating_activities(
 		mapper["finance_costs_adjustments"] = [dict(label="Interest Paid", names=[""])]
 
 	for account in mapper["finance_costs_adjustments"]:
-		interest_paid = calculate_adjustment(
+		if interest_paid := calculate_adjustment(
 			filters,
 			mapper["finance_costs_adjustments"],
 			mapper["finance_costs"],
 			filters.accumulated_values,
 			period_list,
-		)
-
-		if interest_paid:
+		):
 			interest_paid.update(
 				{
 					"parent_account": mapper["section_header"],
@@ -340,8 +345,9 @@ def calculate_adjustment(
 		filters, expense_accounts, period_list, use_accumulated_values
 	)
 
-	data = _calculate_adjustment(non_expense_closing, non_expense_opening, expense_data)
-	return data
+	return _calculate_adjustment(
+		non_expense_closing, non_expense_opening, expense_data
+	)
 
 
 def _calculate_adjustment(non_expense_closing, non_expense_opening, expense_data):
@@ -480,7 +486,7 @@ def execute(filters=None):
 def _get_account_type_based_data(
 	filters, account_names, period_list, accumulated_values, opening_balances=0
 ):
-	if not account_names or not account_names[0] or not type(account_names[0]) == str:
+	if not account_names or not account_names[0] or type(account_names[0]) != str:
 		# only proceed if account_names is a list of account names
 		return {}
 
@@ -505,11 +511,11 @@ def _get_account_type_based_data(
 		if opening_balances:
 			date_info = dict(date=start_date)
 			months_map = {"Monthly": -1, "Quarterly": -3, "Half-Yearly": -6}
-			years_map = {"Yearly": -1}
-
 			if months_map.get(filters.periodicity):
 				date_info.update(months=months_map[filters.periodicity])
 			else:
+				years_map = {"Yearly": -1}
+
 				date_info.update(years=years_map[filters.periodicity])
 
 			if accumulated_values:
@@ -517,11 +523,9 @@ def _get_account_type_based_data(
 			else:
 				start, end = add_to_date(**date_info), add_to_date(**date_info)
 
-			start, end = get_date_str(start), get_date_str(end)
-
 		else:
 			start, end = start_date if accumulated_values else period["from_date"], period["to_date"]
-			start, end = get_date_str(start), get_date_str(end)
+		start, end = get_date_str(start), get_date_str(end)
 
 		result = (
 			frappe.qb.from_(GLEntry)
@@ -535,11 +539,7 @@ def _get_account_type_based_data(
 			)
 		).run()
 
-		if result and result[0]:
-			gl_sum = result[0][0]
-		else:
-			gl_sum = 0
-
+		gl_sum = result[0][0] if result and result[0] else 0
 		total += flt(gl_sum)
 		data.setdefault(period["key"], flt(gl_sum))
 

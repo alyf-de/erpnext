@@ -65,15 +65,13 @@ class Subscription(Document):
 			and self.trial_period_end
 			and getdate(self.trial_period_end) > getdate(self.start_date)
 		):
-			_current_invoice_start = add_days(self.trial_period_end, 1)
+			return add_days(self.trial_period_end, 1)
 		elif self.trial_period_start and self.is_trialling():
-			_current_invoice_start = self.trial_period_start
+			return self.trial_period_start
 		elif date:
-			_current_invoice_start = date
+			return date
 		else:
-			_current_invoice_start = nowdate()
-
-		return _current_invoice_start
+			return nowdate()
 
 	def get_current_invoice_end(self, date=None):
 		"""
@@ -91,8 +89,7 @@ class Subscription(Document):
 		if self.is_trialling() and getdate(date) < getdate(self.trial_period_end):
 			_current_invoice_end = self.trial_period_end
 		else:
-			billing_cycle_info = self.get_billing_cycle_data()
-			if billing_cycle_info:
+			if billing_cycle_info := self.get_billing_cycle_data():
 				if self.is_new_subscription() and getdate(self.start_date) < getdate(date):
 					_current_invoice_end = add_to_date(self.start_date, **billing_cycle_info)
 
@@ -121,7 +118,7 @@ class Subscription(Document):
 					current_invoice_end_year -= 1
 
 				_current_invoice_end = get_last_day(
-					cstr(current_invoice_end_year) + "-" + cstr(calendar_month) + "-01"
+					f"{cstr(current_invoice_end_year)}-{cstr(calendar_month)}-01"
 				)
 
 			if self.end_date and getdate(_current_invoice_end) > getdate(self.end_date):
@@ -147,14 +144,15 @@ class Subscription(Document):
 		plan_names = [plan.plan for plan in self.plans]
 
 		subscription_plan = frappe.qb.DocType("Subscription Plan")
-		billing_info = (
+		return (
 			frappe.qb.from_(subscription_plan)
-			.select(subscription_plan.billing_interval, subscription_plan.billing_interval_count)
+			.select(
+				subscription_plan.billing_interval,
+				subscription_plan.billing_interval_count,
+			)
 			.distinct()
 			.where(subscription_plan.name.isin(plan_names))
 		).run(as_dict=1)
-
-		return billing_info
 
 	def get_billing_cycle_data(self):
 		"""
@@ -167,7 +165,7 @@ class Subscription(Document):
 		self.validate_plans_billing_cycle(billing_info)
 
 		if billing_info:
-			data = dict()
+			data = {}
 			interval = billing_info[0]["billing_interval"]
 			interval_count = billing_info[0]["billing_interval_count"]
 			if interval not in ["Day", "Week"]:
@@ -259,13 +257,12 @@ class Subscription(Document):
 		"""
 		Returns the most recent generated invoice.
 		"""
-		doctype = "Sales Invoice" if self.party_type == "Customer" else "Purchase Invoice"
-
 		if len(self.invoices):
 			current = self.invoices[-1]
+			doctype = "Sales Invoice" if self.party_type == "Customer" else "Purchase Invoice"
+
 			if frappe.db.exists(doctype, current.get("invoice")):
-				doc = frappe.get_doc(doctype, current.get("invoice"))
-				return doc
+				return frappe.get_doc(doctype, current.get("invoice"))
 			else:
 				frappe.throw(_("Invoice {0} no longer exists").format(current.get("invoice")))
 
@@ -485,19 +482,17 @@ class Subscription(Document):
 				}
 
 			if deferred:
-				item.update(
-					{
-						deferred_field: deferred,
-						"service_start_date": self.current_invoice_start,
-						"service_end_date": self.current_invoice_end,
-					}
-				)
+				item |= {
+					deferred_field: deferred,
+					"service_start_date": self.current_invoice_start,
+					"service_end_date": self.current_invoice_end,
+				}
 
 			accounting_dimensions = get_accounting_dimensions()
 
 			for dimension in accounting_dimensions:
 				if plan_doc.get(dimension):
-					item.update({dimension: plan_doc.get(dimension)})
+					item[dimension] = plan_doc.get(dimension)
 
 			items.append(item)
 
@@ -538,17 +533,17 @@ class Subscription(Document):
 	def is_current_invoice_generated(self, _current_start_date=None, _current_end_date=None):
 		invoice = self.get_current_invoice()
 
-		if not (_current_start_date and _current_end_date):
+		if not _current_start_date or not _current_end_date:
 			_current_start_date, _current_end_date = self.update_subscription_period(
 				date=add_days(self.current_invoice_end, 1), return_date=True
 			)
 
-		if invoice and getdate(_current_start_date) <= getdate(invoice.posting_date) <= getdate(
-			_current_end_date
-		):
-			return True
-
-		return False
+		return bool(
+			invoice
+			and getdate(_current_start_date)
+			<= getdate(invoice.posting_date)
+			<= getdate(_current_end_date)
+		)
 
 	def process_for_active(self):
 		"""
@@ -630,11 +625,11 @@ class Subscription(Document):
 		current_invoice = self.get_current_invoice()
 		invoice_list = [d.invoice for d in self.invoices]
 
-		outstanding_invoices = frappe.get_all(
-			doctype, fields=["name"], filters={"status": ("!=", "Paid"), "name": ("in", invoice_list)}
-		)
-
-		if outstanding_invoices:
+		if outstanding_invoices := frappe.get_all(
+			doctype,
+			fields=["name"],
+			filters={"status": ("!=", "Paid"), "name": ("in", invoice_list)},
+		):
 			return True
 		else:
 			False
@@ -646,7 +641,7 @@ class Subscription(Document):
 		"""
 		if self.status != "Cancelled":
 			to_generate_invoice = (
-				True if self.status == "Active" and not self.generate_invoice_at_period_start else False
+				self.status == "Active" and not self.generate_invoice_at_period_start
 			)
 			to_prorate = frappe.db.get_single_value("Subscription Settings", "prorate")
 			self.status = "Cancelled"
@@ -671,8 +666,7 @@ class Subscription(Document):
 			frappe.throw(_("You cannot restart a Subscription that is not cancelled."))
 
 	def get_precision(self):
-		invoice = self.get_current_invoice()
-		if invoice:
+		if invoice := self.get_current_invoice():
 			return invoice.precision("grand_total")
 
 
@@ -688,13 +682,10 @@ def get_calendar_months(billing_interval):
 
 def get_prorata_factor(period_end, period_start, is_prepaid):
 	if is_prepaid:
-		prorate_factor = 1
-	else:
-		diff = flt(date_diff(nowdate(), period_start) + 1)
-		plan_days = flt(date_diff(period_end, period_start) + 1)
-		prorate_factor = diff / plan_days
-
-	return prorate_factor
+		return 1
+	diff = flt(date_diff(nowdate(), period_start) + 1)
+	plan_days = flt(date_diff(period_end, period_start) + 1)
+	return diff / plan_days
 
 
 def process_all():

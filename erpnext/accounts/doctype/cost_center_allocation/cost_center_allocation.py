@@ -36,7 +36,9 @@ class CostCenterAllocation(Document):
 		self.validate_child_cost_centers()
 
 	def validate_total_allocation_percentage(self):
-		total_percentage = sum([d.percentage for d in self.get("allocation_percentages", [])])
+		total_percentage = sum(
+			d.percentage for d in self.get("allocation_percentages", [])
+		)
 
 		if total_percentage != 100:
 			frappe.throw(
@@ -44,17 +46,12 @@ class CostCenterAllocation(Document):
 			)
 
 	def validate_from_date_based_on_existing_gle(self):
-		# Check if GLE exists against the main cost center
-		# If exists ensure from date is set after posting date of last GLE
-
-		last_gle_date = frappe.db.get_value(
+		if last_gle_date := frappe.db.get_value(
 			"GL Entry",
 			{"cost_center": self.main_cost_center, "is_cancelled": 0},
 			"posting_date",
 			order_by="posting_date desc",
-		)
-
-		if last_gle_date:
+		):
 			if getdate(self.valid_from) <= getdate(last_gle_date):
 				frappe.throw(
 					_(
@@ -64,10 +61,7 @@ class CostCenterAllocation(Document):
 				)
 
 	def validate_backdated_allocation(self):
-		# Check if there are any future existing allocation records against the main cost center
-		# If exists, warn the user about it
-
-		future_allocation = frappe.db.get_value(
+		if future_allocation := frappe.db.get_value(
 			"Cost Center Allocation",
 			filters={
 				"main_cost_center": self.main_cost_center,
@@ -78,9 +72,7 @@ class CostCenterAllocation(Document):
 			fieldname=["valid_from", "name"],
 			order_by="valid_from",
 			as_dict=1,
-		)
-
-		if future_allocation:
+		):
 			frappe.msgprint(
 				_(
 					"Another Cost Center Allocation record {0} applicable from {1}, hence this allocation will be applicable upto {2}"
@@ -102,14 +94,11 @@ class CostCenterAllocation(Document):
 				MainCostCenterCantBeChild,
 			)
 
-		# If main cost center is used for allocation under any other cost center,
-		# allocation cannot be done against it
-		parent = frappe.db.get_value(
+		if parent := frappe.db.get_value(
 			"Cost Center Allocation Percentage",
 			filters={"cost_center": self.main_cost_center, "docstatus": 1},
 			fieldname="parent",
-		)
-		if parent:
+		):
 			frappe.throw(
 				_(
 					"{0} cannot be used as a Main Cost Center because it has been used as child in Cost Center Allocation {1}"

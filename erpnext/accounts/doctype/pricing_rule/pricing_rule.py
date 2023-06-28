@@ -56,7 +56,7 @@ class PricingRule(Document):
 			throw(_("{0} is required").format(self.meta.get_label(tocheck)), frappe.MandatoryError)
 
 		if self.apply_rule_on_other:
-			o_field = "other_" + frappe.scrub(self.apply_rule_on_other)
+			o_field = f"other_{frappe.scrub(self.apply_rule_on_other)}"
 			if not self.get(o_field) and o_field in other_fields:
 				frappe.throw(
 					_("For the 'Apply Rule On Other' condition the field {0} is mandatory").format(
@@ -150,7 +150,11 @@ class PricingRule(Document):
 		cleanup_other_fields = (
 			other_fields
 			if not apply_rule_on_other
-			else [o_field for o_field in other_fields if o_field != "other_" + apply_rule_on_other]
+			else [
+				o_field
+				for o_field in other_fields
+				if o_field != f"other_{apply_rule_on_other}"
+			]
 		)
 
 		for other_field in cleanup_other_fields:
@@ -177,7 +181,7 @@ class PricingRule(Document):
 	def validate_price_list_with_currency(self):
 		if self.currency and self.for_price_list:
 			price_list_currency = frappe.db.get_value("Price List", self.for_price_list, "currency", True)
-			if not self.currency == price_list_currency:
+			if self.currency != price_list_currency:
 				throw(_("Currency should be same as Price List Currency: {0}").format(price_list_currency))
 
 	def validate_dates(self):
@@ -248,7 +252,7 @@ def apply_pricing_rule(args, doc=None):
 		filters=[["item_code", "in", item_code_list]],
 		as_list=1,
 	)
-	serialized_items = dict()
+	serialized_items = {}
 	for item_code, val in query_items:
 		serialized_items.setdefault(item_code, val)
 
@@ -374,7 +378,7 @@ def get_pricing_rule_for_item(args, doc=None, for_validate=False):
 				if pricing_rule.apply_rule_on_other_items:
 					item_details["apply_rule_on_other_items"] = json.dumps(pricing_rule.apply_rule_on_other_items)
 
-			if pricing_rule.coupon_code_based == 1 and args.coupon_code == None:
+			if pricing_rule.coupon_code_based == 1 and args.coupon_code is None:
 				return item_details
 
 			if not pricing_rule.validate_applied_rule:
@@ -406,18 +410,20 @@ def get_pricing_rule_for_item(args, doc=None, for_validate=False):
 
 
 def update_args_for_pricing_rule(args):
-	if not (args.item_group and args.brand):
-		item = frappe.get_cached_value("Item", args.item_code, ("item_group", "brand"))
-		if not item:
+	if not args.item_group or not args.brand:
+		if item := frappe.get_cached_value(
+			"Item", args.item_code, ("item_group", "brand")
+		):
+			args.item_group, args.brand = item
+
+		else:
 			return
 
-		args.item_group, args.brand = item
-
-		if not args.item_group:
-			frappe.throw(_("Item Group not mentioned in item master for item {0}").format(args.item_code))
+	if not args.item_group:
+		frappe.throw(_("Item Group not mentioned in item master for item {0}").format(args.item_code))
 
 	if args.transaction_type == "selling":
-		if args.customer and not (args.customer_group and args.territory):
+		if args.customer and (not args.customer_group or not args.territory):
 
 			if args.quotation_to and args.quotation_to != "Customer":
 				customer = frappe._dict()
@@ -505,13 +511,13 @@ def remove_pricing_rule_for_item(pricing_rules, item_details, item_code=None, ra
 		pricing_rule = frappe.get_cached_doc("Pricing Rule", d)
 
 		if pricing_rule.price_or_product_discount == "Price":
-			if pricing_rule.rate_or_discount == "Discount Percentage":
-				item_details.discount_percentage = 0.0
-				item_details.discount_amount = 0.0
-				item_details.rate = rate or 0.0
-
 			if pricing_rule.rate_or_discount == "Discount Amount":
 				item_details.discount_amount = 0.0
+
+			elif pricing_rule.rate_or_discount == "Discount Percentage":
+				item_details.discount_amount = 0.0
+				item_details.discount_percentage = 0.0
+				item_details.rate = rate or 0.0
 
 			if pricing_rule.margin_type in ["Percentage", "Amount"]:
 				item_details.margin_rate_or_amount = 0.0

@@ -184,22 +184,18 @@ def get_tax_row_for_tcs(inv, tax_details, tax_amount, tax_deducted):
 	}
 
 	if tax_deducted:
-		# TCS already deducted on previous invoices
-		# So, TCS will be calculated by 'Previous Row Total'
-
-		taxes_excluding_tcs = [d for d in inv.taxes if d.account_head != tax_details.account_head]
-		if taxes_excluding_tcs:
+		if taxes_excluding_tcs := [
+			d for d in inv.taxes if d.account_head != tax_details.account_head
+		]:
 			# chargeable amount is the total amount after other charges are applied
-			row.update(
-				{
-					"charge_type": "On Previous Row Total",
-					"row_id": len(taxes_excluding_tcs),
-					"rate": tax_details.rate,
-				}
-			)
+			row |= {
+				"charge_type": "On Previous Row Total",
+				"row_id": len(taxes_excluding_tcs),
+				"rate": tax_details.rate,
+			}
 		else:
 			# if only TCS is to be charged, then net total is chargeable amount
-			row.update({"charge_type": "On Net Total", "rate": tax_details.rate})
+			row |= {"charge_type": "On Net Total", "rate": tax_details.rate}
 
 	return row
 
@@ -216,7 +212,7 @@ def get_tax_row_for_tds(tax_details, tax_amount):
 
 
 def get_lower_deduction_certificate(tax_details, pan_no):
-	ldc_name = frappe.db.get_value(
+	if ldc_name := frappe.db.get_value(
 		"Lower Deduction Certificate",
 		{
 			"pan_no": pan_no,
@@ -225,9 +221,7 @@ def get_lower_deduction_certificate(tax_details, pan_no):
 			"valid_upto": ("<=", tax_details.to_date),
 		},
 		"name",
-	)
-
-	if ldc_name:
+	):
 		return frappe.get_doc("Lower Deduction Certificate", ldc_name)
 
 
@@ -302,17 +296,21 @@ def get_invoice_vouchers(parties, tax_details, company, party_type="Supplier"):
 	}
 
 	if not tax_details.get("consider_party_ledger_amount") and doctype != "Sales Invoice":
-		filters.update(
-			{"apply_tds": 1, "tax_withholding_category": tax_details.get("tax_withholding_category")}
-		)
+		filters |= {
+			"apply_tds": 1,
+			"tax_withholding_category": tax_details.get("tax_withholding_category"),
+		}
 
 	invoices_details = frappe.get_all(doctype, filters=filters, fields=["name", field])
 
 	for d in invoices_details:
 		vouchers.append(d.name)
-		voucher_wise_amount.update({d.name: {"amount": d.base_net_total, "voucher_type": doctype}})
+		voucher_wise_amount[d.name] = {
+			"amount": d.base_net_total,
+			"voucher_type": doctype,
+		}
 
-	journal_entries_details = frappe.db.sql(
+	if journal_entries_details := frappe.db.sql(
 		"""
 		SELECT j.name, ja.credit - ja.debit AS amount
 			FROM `tabJournal Entry` j, `tabJournal Entry Account` ja
@@ -332,12 +330,13 @@ def get_invoice_vouchers(parties, tax_details, company, party_type="Supplier"):
 			tax_details.get("tax_withholding_category"),
 		),
 		as_dict=1,
-	)
-
-	if journal_entries_details:
+	):
 		for d in journal_entries_details:
 			vouchers.append(d.name)
-			voucher_wise_amount.update({d.name: {"amount": d.amount, "voucher_type": "Journal Entry"}})
+			voucher_wise_amount[d.name] = {
+				"amount": d.amount,
+				"voucher_type": "Journal Entry",
+			}
 
 	return vouchers, voucher_wise_amount
 
@@ -357,7 +356,7 @@ def get_advance_vouchers(
 	}
 
 	if party_type == "Customer":
-		filters.update({"against_voucher": ["is", "not set"]})
+		filters["against_voucher"] = ["is", "not set"]
 
 	if company:
 		filters["company"] = company
@@ -371,9 +370,7 @@ def get_taxes_deducted_on_advances_allocated(inv, tax_details):
 	tax_info = []
 
 	if inv.get("advances"):
-		advances = [d.reference_name for d in inv.get("advances")]
-
-		if advances:
+		if advances := [d.reference_name for d in inv.get("advances")]:
 			pe = frappe.qb.DocType("Payment Entry").as_("pe")
 			at = frappe.qb.DocType("Advance Taxes and Charges").as_("at")
 
@@ -537,41 +534,45 @@ def get_invoice_total_without_tcs(inv, tax_details):
 
 
 def get_tds_amount_from_ldc(ldc, parties, tax_details, posting_date, net_total):
-	tds_amount = 0
 	limit_consumed = frappe.db.get_value(
 		"Purchase Invoice",
 		{"supplier": ("in", parties), "apply_tds": 1, "docstatus": 1},
 		"sum(tax_withholding_net_total)",
 	)
 
-	if is_valid_certificate(
-		ldc.valid_from, ldc.valid_upto, posting_date, limit_consumed, net_total, ldc.certificate_limit
-	):
-		tds_amount = get_ltds_amount(
-			net_total, limit_consumed, ldc.certificate_limit, ldc.rate, tax_details
+	return (
+		get_ltds_amount(
+			net_total,
+			limit_consumed,
+			ldc.certificate_limit,
+			ldc.rate,
+			tax_details,
 		)
-
-	return tds_amount
+		if is_valid_certificate(
+			ldc.valid_from,
+			ldc.valid_upto,
+			posting_date,
+			limit_consumed,
+			net_total,
+			ldc.certificate_limit,
+		)
+		else 0
+	)
 
 
 def get_ltds_amount(current_amount, deducted_amount, certificate_limit, rate, tax_details):
 	if current_amount < (certificate_limit - deducted_amount):
 		return current_amount * rate / 100
-	else:
-		ltds_amount = certificate_limit - deducted_amount
-		tds_amount = current_amount - ltds_amount
+	ltds_amount = certificate_limit - deducted_amount
+	tds_amount = current_amount - ltds_amount
 
-		return ltds_amount * rate / 100 + tds_amount * tax_details.rate / 100
+	return ltds_amount * rate / 100 + tds_amount * tax_details.rate / 100
 
 
 def is_valid_certificate(
 	valid_from, valid_upto, posting_date, deducted_amount, current_amount, certificate_limit
 ):
-	valid = False
-
-	if (
+	return (
 		getdate(valid_from) <= getdate(posting_date) <= getdate(valid_upto)
-	) and certificate_limit > deducted_amount:
-		valid = True
-
-	return valid
+		and certificate_limit > deducted_amount
+	)

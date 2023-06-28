@@ -45,11 +45,9 @@ class PaymentRequest(Document):
 			frappe.throw(_("To create a Payment Request reference document is required"))
 
 	def validate_payment_request_amount(self):
-		existing_payment_request_amount = get_existing_payment_request_amount(
+		if existing_payment_request_amount := get_existing_payment_request_amount(
 			self.reference_doctype, self.reference_name
-		)
-
-		if existing_payment_request_amount:
+		):
 			ref_doc = frappe.get_doc(self.reference_doctype, self.reference_name)
 			if hasattr(ref_doc, "order_type") and getattr(ref_doc, "order_type") != "Shopping Cart":
 				ref_amount = get_amount(ref_doc, self.payment_account)
@@ -69,29 +67,30 @@ class PaymentRequest(Document):
 			frappe.throw(_("Transaction currency must be same as Payment Gateway currency"))
 
 	def validate_subscription_details(self):
-		if self.is_a_subscription:
-			amount = 0
-			for subscription_plan in self.subscription_plans:
-				payment_gateway = frappe.db.get_value(
-					"Subscription Plan", subscription_plan.plan, "payment_gateway"
-				)
-				if payment_gateway != self.payment_gateway_account:
-					frappe.throw(
-						_(
-							"The payment gateway account in plan {0} is different from the payment gateway account in this payment request"
-						).format(subscription_plan.name)
-					)
-
-				rate = get_plan_rate(subscription_plan.plan, quantity=subscription_plan.qty)
-
-				amount += rate
-
-			if amount != self.grand_total:
-				frappe.msgprint(
+		if not self.is_a_subscription:
+			return
+		amount = 0
+		for subscription_plan in self.subscription_plans:
+			payment_gateway = frappe.db.get_value(
+				"Subscription Plan", subscription_plan.plan, "payment_gateway"
+			)
+			if payment_gateway != self.payment_gateway_account:
+				frappe.throw(
 					_(
-						"The amount of {0} set in this payment request is different from the calculated amount of all payment plans: {1}. Make sure this is correct before submitting the document."
-					).format(self.grand_total, amount)
+						"The payment gateway account in plan {0} is different from the payment gateway account in this payment request"
+					).format(subscription_plan.name)
 				)
+
+			rate = get_plan_rate(subscription_plan.plan, quantity=subscription_plan.qty)
+
+			amount += rate
+
+		if amount != self.grand_total:
+			frappe.msgprint(
+				_(
+					"The amount of {0} set in this payment request is different from the calculated amount of all payment plans: {1}. Make sure this is correct before submitting the document."
+				).format(self.grand_total, amount)
+			)
 
 	def on_submit(self):
 		if self.payment_request_type == "Outward":
@@ -134,7 +133,7 @@ class PaymentRequest(Document):
 		controller.request_for_payment(**payment_record)
 
 	def get_request_amount(self):
-		data_of_completed_requests = frappe.get_all(
+		if data_of_completed_requests := frappe.get_all(
 			"Integration Request",
 			filters={
 				"reference_doctype": self.doctype,
@@ -142,13 +141,12 @@ class PaymentRequest(Document):
 				"status": "Completed",
 			},
 			pluck="data",
-		)
-
-		if not data_of_completed_requests:
+		):
+			return sum(
+				json.loads(d).get("request_amount") for d in data_of_completed_requests
+			)
+		else:
 			return self.grand_total
-
-		request_amounts = sum(json.loads(d).get("request_amount") for d in data_of_completed_requests)
-		return request_amounts
 
 	def on_cancel(self):
 		self.check_if_payment_entry_exists()
@@ -184,7 +182,7 @@ class PaymentRequest(Document):
 		if (
 			self.payment_url
 			or not self.payment_gateway_account
-			or (self.payment_gateway_account and self.payment_channel == "Phone")
+			or self.payment_channel == "Phone"
 		):
 			self.db_set("status", "Initiated")
 
@@ -382,8 +380,7 @@ class PaymentRequest(Document):
 				and frappe.local.session.user != "Guest"
 			) and self.payment_channel != "Phone":
 
-				success_url = shopping_cart_settings.payment_success_url
-				if success_url:
+				if success_url := shopping_cart_settings.payment_success_url:
 					redirect_to = ({"Orders": "/orders", "Invoices": "/invoices", "My Account": "/me"}).get(
 						success_url, "/me"
 					)
@@ -430,9 +427,9 @@ def make_payment_request(**args):
 		{"reference_doctype": args.dt, "reference_name": args.dn, "docstatus": 0},
 	)
 
-	existing_payment_request_amount = get_existing_payment_request_amount(args.dt, args.dn)
-
-	if existing_payment_request_amount:
+	if existing_payment_request_amount := get_existing_payment_request_amount(
+		args.dt, args.dn
+	):
 		grand_total -= existing_payment_request_amount
 
 	if draft_payment_request:
@@ -486,10 +483,7 @@ def make_payment_request(**args):
 		frappe.local.response["type"] = "redirect"
 		frappe.local.response["location"] = pr.get_payment_url()
 
-	if args.return_doc:
-		return pr
-
-	return pr.as_dict()
+	return pr if args.return_doc else pr.as_dict()
 
 
 def get_amount(ref_doc, payment_account=None):
@@ -542,7 +536,7 @@ def get_existing_payment_request_amount(ref_dt, ref_dn):
 	return flt(existing_payment_request_amount[0][0]) if existing_payment_request_amount else 0
 
 
-def get_gateway_details(args):  # nosemgrep
+def get_gateway_details(args):	# nosemgrep
 	"""return gateway and payment account of default payment gateway"""
 	if args.get("payment_gateway_account"):
 		return get_payment_gateway_account(args.get("payment_gateway_account"))
@@ -551,9 +545,7 @@ def get_gateway_details(args):  # nosemgrep
 		payment_gateway_account = frappe.get_doc("E Commerce Settings").payment_gateway_account
 		return get_payment_gateway_account(payment_gateway_account)
 
-	gateway_account = get_payment_gateway_account({"is_default": 1})
-
-	return gateway_account
+	return get_payment_gateway_account({"is_default": 1})
 
 
 def get_payment_gateway_account(args):
@@ -567,11 +559,15 @@ def get_payment_gateway_account(args):
 
 @frappe.whitelist()
 def get_print_format_list(ref_doctype):
-	print_format_list = ["Standard"]
-
-	print_format_list.extend(
-		[p.name for p in frappe.get_all("Print Format", filters={"doc_type": ref_doctype})]
-	)
+	print_format_list = [
+		"Standard",
+		*[
+			p.name
+			for p in frappe.get_all(
+				"Print Format", filters={"doc_type": ref_doctype}
+			)
+		],
+	]
 
 	return {"print_format": print_format_list}
 
@@ -591,16 +587,14 @@ def update_payment_req_status(doc, method):
 	from erpnext.accounts.doctype.payment_entry.payment_entry import get_reference_details
 
 	for ref in doc.references:
-		payment_request_name = frappe.db.get_value(
+		if payment_request_name := frappe.db.get_value(
 			"Payment Request",
 			{
 				"reference_doctype": ref.reference_doctype,
 				"reference_name": ref.reference_name,
 				"docstatus": 1,
 			},
-		)
-
-		if payment_request_name:
+		):
 			ref_details = get_reference_details(
 				ref.reference_doctype, ref.reference_name, doc.party_account_currency
 			)
@@ -650,8 +644,7 @@ def get_subscription_details(reference_doctype, reference_name):
 		subscription_plans = []
 		for subscription in subscriptions:
 			plans = frappe.get_doc("Subscription", subscription.sub_name).plans
-			for plan in plans:
-				subscription_plans.append(plan)
+			subscription_plans.extend(iter(plans))
 		return subscription_plans
 
 
